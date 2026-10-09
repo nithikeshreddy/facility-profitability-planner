@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import 'leaflet/dist/leaflet.css'
 import './index.css'
 import Layout from './components/Layout.tsx'
 import ComparePlans from './pages/ComparePlans.tsx'
@@ -16,6 +17,7 @@ createRoot(document.getElementById('root')!).render(
         <Route element={<Layout />}>
           <Route index element={<Overview />} />
           <Route path="locations" element={<LocationDetails />} />
+          <Route path="locations/:id" element={<LocationDetails />} />
           <Route path="compare" element={<ComparePlans />} />
           <Route path="renewals" element={<RenewalReview />} />
           <Route path="incentives" element={<VendorIncentives />} />

@@ -83,6 +83,11 @@ def lightweight_contribution(revenue: float, actual_cost: float) -> Money:
     return Money(round(revenue - actual_cost, 2), "actual")
 
 
+def direct_costs(revenue: Money, contribution: Money) -> Money:
+    """Everything between revenue and contribution (revenue − contribution); the least certain kind wins."""
+    return Money(round(revenue.amount - contribution.amount, 2), combine_kinds(revenue.kind, contribution.kind))
+
+
 @dataclass(frozen=True)
 class PortfolioTotals:
     sites: int
@@ -97,14 +102,14 @@ def portfolio_totals(rows: Iterable[tuple[Money, Money]]) -> PortfolioTotals:
     rows = list(rows)
     revenue = round(sum(r.amount for r, _ in rows), 2)
     contribution = round(sum(c.amount for _, c in rows), 2)
-    rev_kind = combine_kinds(*(r.kind for r, _ in rows))
-    con_kind = combine_kinds(*(c.kind for _, c in rows))
+    revenue = Money(revenue, combine_kinds(*(r.kind for r, _ in rows)))
+    contribution = Money(contribution, combine_kinds(*(c.kind for _, c in rows)))
     return PortfolioTotals(
         sites=len(rows),
         loss_making=sum(1 for _, c in rows if c.amount < 0),
-        revenue=Money(revenue, rev_kind),
-        direct_costs=Money(round(revenue - contribution, 2), combine_kinds(rev_kind, con_kind)),
-        contribution=Money(contribution, con_kind),
+        revenue=revenue,
+        direct_costs=direct_costs(revenue, contribution),
+        contribution=contribution,
     )
 
 

@@ -131,6 +131,7 @@ class SiteSummary:
     lng: float
     detailed: bool
     revenue: Money
+    direct_costs: Money
     contribution: Money
 
 
@@ -150,8 +151,9 @@ def overview(db: Session, state: str | None = None, loss_only: bool = False, det
             contrib = finance.lightweight_contribution(loc.revenue_monthly, loc.actual_cost_monthly)
         if loss_only and contrib.amount >= 0:
             continue
+        revenue = Money(loc.revenue_monthly, "actual")
         sites.append(SiteSummary(loc.id, loc.code, loc.name, loc.city, loc.state, loc.lat, loc.lng, loc.detailed,
-                                 Money(loc.revenue_monthly, "actual"), contrib))
+                                 revenue, finance.direct_costs(revenue, contrib), contrib))
 
     totals = finance.portfolio_totals((s.revenue, s.contribution) for s in sites)
     return {

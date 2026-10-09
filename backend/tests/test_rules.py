@@ -138,6 +138,11 @@ def test_portfolio_totals_combine_kinds_and_count_losses():
     assert totals.direct_costs == Money(2750, "estimated")
 
 
+def test_direct_costs_is_revenue_minus_contribution():
+    assert finance.direct_costs(Money(1100, "actual"), Money(-150, "actual")) == Money(1250, "actual")
+    assert finance.direct_costs(Money(1600, "actual"), Money(182.5, "estimated")) == Money(1417.5, "estimated")
+
+
 def test_evidence_describe_resolves_records_and_falls_back():
     records = LocationRecords(
         site=_site(),

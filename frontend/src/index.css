@@ -1,1 +1,11 @@
 @import "tailwindcss";
+
+/* Leaflet popups/tooltips use the app font instead of Leaflet's default. */
+.leaflet-container {
+  font-family: inherit;
+}
+
+/* Quiet, gray basemap so the red/green site markers carry the color. */
+.site-map .leaflet-tile-pane {
+  filter: grayscale(1) contrast(0.85) brightness(1.08);
+}

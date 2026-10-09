@@ -29,7 +29,11 @@ def test_overview_totals_and_sites(client, seeded):
     assert totals["detailed_sites"] == 12
     assert totals["loss_making"] == sum(1 for s in sites if s["contribution"]["amount"] < 0)
     assert totals["revenue"]["amount"] - totals["direct_costs"]["amount"] == pytest.approx(totals["contribution"]["amount"])
-    assert {"id", "lat", "lng", "contribution", "detailed", "name", "city", "state"} <= set(sites[0])
+    assert {"id", "lat", "lng", "revenue", "direct_costs", "contribution", "detailed", "name", "city", "state"} <= set(sites[0])
+    for s in sites:
+        assert s["revenue"]["amount"] - s["direct_costs"]["amount"] == pytest.approx(s["contribution"]["amount"])
+    lightweight = next(s for s in sites if not s["detailed"])
+    assert lightweight["direct_costs"]["kind"] == "actual"
     assert sites[0]["contribution"]["kind"] in ("estimated", "quoted", "actual")
     assert "AZ" in body["states"]
 

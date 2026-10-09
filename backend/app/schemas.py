@@ -91,6 +91,8 @@ class SiteOut(Out):
     lat: float
     lng: float
     detailed: bool
+    revenue: MoneyOut
+    direct_costs: MoneyOut
     contribution: MoneyOut
 
 
