@@ -10,7 +10,7 @@ The underlying loop: **find the loss, prove its cause, apply the matching fix, a
 
 ## Live demo
 
-**https://facility-planner.onrender.com** *(placeholder: replace with the Render URL after the first deploy)*
+**https://facility-planner.onrender.com** 
 
 It runs on Render's free plan, so the instance sleeps when idle and the first request can take up to a minute to wake it. Each wake starts from freshly seeded demonstration data, so saved proposed actions do not survive a restart.
 
