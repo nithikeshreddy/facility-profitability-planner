@@ -142,7 +142,6 @@ cd frontend && npm run build && npm run lint
 - **Shared demo state.** All visitors share one database. Saved actions and changes are visible to everyone until someone presses **Reset demo**, which restores the original data.
 - Projected savings are estimates. Nothing here confirms them against later invoices.
 
-## AI tools used
 
 ## AI tools used
 
