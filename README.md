@@ -99,7 +99,7 @@ Open http://localhost:5173.
 ./start.sh   # uvicorn on 0.0.0.0:$PORT (default 8000)
 ```
 
-Open https://facility-planner.onrender.com. FastAPI serves `/api/*` and the built frontend. Any other path that is not a real file returns `index.html`, so direct links like `/compare?location=1` work. Unknown `/api/*` paths return a JSON 404. API docs are at `/docs`.
+Open http:localhost:8000. FastAPI serves `/api/*` and the built frontend. Any other path that is not a real file returns `index.html`, so direct links like `/compare?location=1` work. Unknown `/api/*` paths return a JSON 404. API docs are at `/docs`.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -116,8 +116,8 @@ Multi-stage image: a Node build stage, then a slim Python runtime running as a n
 
 ```bash
 docker build -t facility-planner .
-docker run --rm -p 8000:8000 facility-planner                 # https://facility-planner.onrender.com
-docker run --rm -p 9000:9000 -e PORT=9000 facility-planner     # any $PORT
+docker run --rm -p 8000:8000 facility-planner                 # http://localhost:8000
+docker run --rm -p 9000:9000 -e PORT=9000 facility-planner     # # http://localhost:8000
 docker run --rm -p 8000:8000 -v fp-data:/data facility-planner # keep the database across restarts
 ```
 
