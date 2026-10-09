@@ -70,6 +70,11 @@ facility-planner/
 - **Incentives**: bonus = min(bonus_rate × monthly invoice, cap) only when ALL targets are met; failures marked customer-caused are excluded from the calculation; anything excluded is listed for exception review.
 - **Renewal queue**: contracts where estimate low > revenue, or still loss-making after the best feasible plan; sorted by renewal date, then by monthly gap. Suggest price, scope, or frequency review with the price needed to reach a target margin (default 10%).
 
+**Interpretation rules (confirmed; count each cost once):**
+
+- **Return visits.** `Invoice` lines with `line_type = return_visit` *are* the company-paid return visits. "Vendor invoices" in the contribution formula means `base` + `extra` lines only, so a return visit is never counted twice. (Phoenix: $1,500 − $1,380 − $380 = −$260.)
+- **Vendor bonuses.** Contribution uses the bonus calculated by the incentive rules (`rules/incentives.py`), so changing a service result changes contribution. No `CostItem(type = bonus)` rows are seeded, and any stored bonus cost item is never added on top of the calculated bonus.
+
 Every money figure carries a **kind**: `estimated`, `quoted`, or `actual`, shown in the UI as a small badge.
 
 ## 5. Data model (minimum)
