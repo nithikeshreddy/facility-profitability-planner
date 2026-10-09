@@ -3,15 +3,17 @@
 bonus = min(bonus_rate × monthly invoice, cap), only when ALL targets are met.
 Failures marked customer-caused are excluded from the calculation and listed for
 exception review. A target with no evidence makes the vendor ineligible ("Evidence missing").
+`apply_change` swaps one recorded service result for a what-if simulation; nothing is stored.
 """
 
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from app.rules.types import (
     InspectionRec,
     InvoiceLine,
     Issue,
+    LocationRecords,
     Money,
     Ref,
     RuleResult,
@@ -181,3 +183,40 @@ def evaluate_incentive(
         checks=checks,
         exceptions=exceptions,
     )
+
+
+@dataclass(frozen=True)
+class ResultChange:
+    """A what-if change to one service result: an inspection score, or an issue's customer-caused flag."""
+
+    inspection_id: int | None = None
+    score: float | None = None
+    issue_id: int | None = None
+    customer_caused: bool | None = None
+
+
+def _caused_by(customer_caused: bool) -> str:
+    return "customer-caused" if customer_caused else "vendor-caused"
+
+
+def apply_change(records: LocationRecords, change: ResultChange) -> tuple[LocationRecords, list[str]]:
+    """Records with the changed service result swapped in, plus a sentence per change. Raises ValueError
+    if a changed record is not among this location's records."""
+    described = []
+    inspections, issues = records.inspections, records.issues
+    if change.inspection_id is not None and change.score is not None:
+        old = next((i for i in inspections if i.id == change.inspection_id), None)
+        if old is None:
+            raise ValueError(f"Inspection {change.inspection_id} is not recorded for {records.site.name}.")
+        inspections = tuple(replace(i, score=change.score) if i.id == old.id else i for i in inspections)
+        described.append(f"Inspection on {old.date.isoformat()}: score {old.score:g} → {change.score:g}.")
+    if change.issue_id is not None and change.customer_caused is not None:
+        old = next((i for i in issues if i.id == change.issue_id), None)
+        if old is None:
+            raise ValueError(f"Issue {change.issue_id} is not recorded for {records.site.name}.")
+        issues = tuple(replace(i, customer_caused=change.customer_caused) if i.id == old.id else i for i in issues)
+        described.append(
+            f"Issue on {old.date.isoformat()} ({old.description}): "
+            f"{_caused_by(old.customer_caused)} → {_caused_by(change.customer_caused)}."
+        )
+    return replace(records, inspections=inspections, issues=issues), described

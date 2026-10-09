@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Kind = Literal["estimated", "quoted", "actual"]
 PlanType = Literal["current", "operational_fix", "vendor_offer", "vendor_bundle"]
+ActionType = Literal["current", "operational_fix", "vendor_offer", "vendor_bundle", "renewal_review"]
 
 
 class Out(BaseModel):
@@ -304,6 +305,141 @@ class PlanComparisonOut(Out):
     recommendation_reasons: list[str]
 
 
+# ---------------------------------------------------------------- renewal review
+
+
+class SuggestionOut(Out):
+    key: str
+    text: str
+
+
+class RenewalItemOut(Out):
+    location_id: int
+    location_name: str
+    contract_id: int
+    renewal_date: date
+    days_to_renewal: int
+    revenue: MoneyOut
+    estimate_low: MoneyOut | None
+    estimate_high: MoneyOut | None
+    actual_cost: MoneyOut | None
+    cost_basis: MoneyOut
+    monthly_gap: MoneyOut
+    suggested_price: MoneyOut
+    projected_contribution: MoneyOut
+    target_margin: float
+    current_frequency_per_week: int
+    suggested_frequency_per_week: int | None
+    triggers: list[str]
+    suggestions: list[SuggestionOut]
+    reasons: list[str]
+    evidence: list[RefOut]
+
+
+class RenewalQueueOut(Out):
+    as_of: date
+    target_margin: float
+    items: list[RenewalItemOut]
+
+
+# ---------------------------------------------------------------- vendor incentives
+
+
+class TargetsOut(Out):
+    completion_min: float
+    inspection_avg_min: float
+    fix_within_24h_min: float
+
+
+class InspectionOut(Out):
+    id: int
+    date: date
+    score: float
+
+
+class IssueOut(Out):
+    id: int
+    date: date
+    category: str
+    description: str
+    customer_caused: bool
+    resolved_hours: float | None
+    visit_id: int | None
+
+
+class VendorLocationOut(Out):
+    location_id: int
+    code: str
+    name: str
+    city: str
+    state: str
+    incentive: IncentiveOut
+    contribution_before_bonus: MoneyOut
+    contribution: MoneyOut  # after bonus
+    inspections: list[InspectionOut]
+    issues: list[IssueOut]
+
+
+class VendorExceptionOut(Out):
+    location_id: int
+    location_name: str
+    ref: RefOut
+    reason: str
+
+
+class VendorIncentiveOut(Out):
+    vendor_id: int
+    vendor_name: str
+    has_program: bool
+    bonus_rate: float | None
+    bonus_cap: MoneyOut | None
+    targets: TargetsOut | None
+    locations: list[VendorLocationOut]
+    total_bonus: MoneyOut
+    total_contribution: MoneyOut
+    exceptions: list[VendorExceptionOut]
+
+
+class VendorIncentivesOut(Out):
+    month: str
+    vendors: list[VendorIncentiveOut]
+
+
+class SimulateIn(BaseModel):
+    """One changed service result: an inspection's score, or an issue's customer-caused flag."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    inspection_id: int | None = None
+    score: float | None = Field(None, ge=0, le=100)
+    issue_id: int | None = None
+    customer_caused: bool | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_change(self):
+        inspection = (self.inspection_id is not None, self.score is not None)
+        issue = (self.issue_id is not None, self.customer_caused is not None)
+        if inspection[0] != inspection[1]:
+            raise ValueError("inspection_id and score go together")
+        if issue[0] != issue[1]:
+            raise ValueError("issue_id and customer_caused go together")
+        if inspection[0] == issue[0]:
+            raise ValueError("change exactly one service result: an inspection score or an issue's customer_caused flag")
+        return self
+
+
+class SimulationOut(Out):
+    vendor_id: int
+    vendor_name: str
+    location_id: int
+    location_name: str
+    changes: list[str]
+    recorded: VendorLocationOut
+    simulated: VendorLocationOut
+    eligibility_changed: bool
+    contribution_change: MoneyOut
+
+
 # ---------------------------------------------------------------- proposed actions
 
 
@@ -311,7 +447,7 @@ class ActionIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     location_id: int
-    plan_type: PlanType
+    plan_type: ActionType
     offer_id: int | None = None
     fix_id: int | None = None
     overrides: PlanOverridesIn | None = None

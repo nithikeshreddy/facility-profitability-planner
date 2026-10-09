@@ -112,6 +112,28 @@ def test_no_inspections_means_ineligible_evidence_missing():
     assert not inc.eligible and check.actual is None and "Evidence missing" in check.detail
 
 
+def test_apply_change_swaps_exactly_one_result_and_describes_it():
+    records = LocationRecords(
+        site=_site(),
+        issues=(Issue(5, date(2026, 9, 15), "missed", "Building closed", True, 12.0, 3),
+                Issue(6, date(2026, 9, 20), "quality", "Mirrors", False, 6.0)),
+        inspections=(InspectionRec(1, date(2026, 9, 8), 91), InspectionRec(2, date(2026, 9, 17), 92)),
+    )
+    changed, described = incentives.apply_change(records, incentives.ResultChange(inspection_id=2, score=85))
+    assert [i.score for i in changed.inspections] == [91, 85]
+    assert changed.issues == records.issues
+    assert described == ["Inspection on 2026-09-17: score 92 → 85."]
+
+    changed, described = incentives.apply_change(records, incentives.ResultChange(issue_id=5, customer_caused=False))
+    assert [i.customer_caused for i in changed.issues] == [False, False]
+    assert changed.inspections == records.inspections
+    assert described == ["Issue on 2026-09-15 (Building closed): customer-caused → vendor-caused."]
+    assert records.inspections[1].score == 92 and records.issues[0].customer_caused  # inputs untouched
+
+    with pytest.raises(ValueError):
+        incentives.apply_change(records, incentives.ResultChange(inspection_id=99, score=50))
+
+
 def _contract(id, renewal):
     return ContractInfo(id, id, 1000, ("Floors",), 5, date(2024, 1, 1), renewal)
 
@@ -126,6 +148,23 @@ def test_renewal_queue_sorted_by_date_then_gap_and_skips_healthy():
     queue = renewals.renewal_queue(inputs, as_of=date(2026, 10, 1))
     assert [i.location_name for i in queue] == ["Big gap", "Small gap", "Later"]
     assert queue[0].suggested_price.amount == pytest.approx(1200 / 0.9, abs=0.01)
+
+
+def test_renewal_item_carries_estimate_actual_cost_and_projection():
+    item = renewals.renewal_item(
+        renewals.RenewalInput(1, "Underpriced", _contract(1, date(2026, 11, 15)), 900, 1170, -340,
+                              estimate_high=1272, actual_cost=Money(1240, "actual")),
+        as_of=date(2026, 10, 1), target_margin=0.10, weeks_per_month=4.33,
+    )
+    assert item.estimate_low == Money(1170, "estimated") and item.estimate_high == Money(1272, "estimated")
+    assert item.actual_cost == Money(1240, "actual")
+    assert item.suggested_price == Money(1377.78, "estimated")  # max(1240, 1170) ÷ 0.9
+    assert item.projected_contribution == Money(137.78, "estimated")
+    assert item.current_frequency_per_week == 5 and item.suggested_frequency_per_week == 3
+    assert renewals.action_summary(item) == (
+        "Renewal review: propose $1,377.78/month (10% target margin) before renewal on 2026-11-15 (45 days); "
+        "today $900. Alternative: 3 visit(s)/week instead of 5 at today's price."
+    )
 
 
 def test_portfolio_totals_combine_kinds_and_count_losses():

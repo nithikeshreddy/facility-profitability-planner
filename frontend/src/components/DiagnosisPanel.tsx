@@ -72,7 +72,7 @@ function FlagCard({ flag, locationId }: { flag: Flag; locationId: number }) {
   const style = FLAG_STYLES[flag.key] ?? DEFAULT_STYLE
   const next =
     flag.key === 'pricing_scope_problem'
-      ? { to: '/renewals', label: 'Open renewal review' }
+      ? { to: `/renewals?location=${locationId}`, label: 'Open renewal review' }
       : { to: `/compare?location=${locationId}`, label: 'Compare possible fixes' }
   const groups = groupEvidence(flag.evidence)
 

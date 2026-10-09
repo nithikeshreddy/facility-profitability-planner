@@ -292,11 +292,129 @@ export interface PlanComparison {
   recommendation_reasons: string[]
 }
 
+// ---------------------------------------------------------------- renewal review
+
+export type RenewalTrigger = 'pricing_scope_problem' | 'loss_after_best_plan'
+
+export interface Suggestion {
+  key: 'price_review' | 'frequency_review' | 'scope_review'
+  text: string
+}
+
+export interface RenewalItem {
+  location_id: number
+  location_name: string
+  contract_id: number
+  renewal_date: string
+  days_to_renewal: number
+  revenue: Money
+  estimate_low: Money | null
+  estimate_high: Money | null
+  actual_cost: Money | null
+  cost_basis: Money
+  monthly_gap: Money
+  suggested_price: Money
+  projected_contribution: Money
+  target_margin: number
+  current_frequency_per_week: number
+  suggested_frequency_per_week: number | null
+  triggers: RenewalTrigger[]
+  suggestions: Suggestion[]
+  reasons: string[]
+  evidence: Ref[]
+}
+
+export interface RenewalQueue {
+  as_of: string
+  target_margin: number
+  items: RenewalItem[]
+}
+
+// ---------------------------------------------------------------- vendor incentives
+
+export interface Targets {
+  completion_min: number
+  inspection_avg_min: number
+  fix_within_24h_min: number
+}
+
+export interface InspectionResult {
+  id: number
+  date: string
+  score: number
+}
+
+export interface IssueResult {
+  id: number
+  date: string
+  category: string
+  description: string
+  customer_caused: boolean
+  resolved_hours: number | null
+  visit_id: number | null
+}
+
+export interface VendorLocation {
+  location_id: number
+  code: string
+  name: string
+  city: string
+  state: string
+  incentive: Incentive
+  contribution_before_bonus: Money
+  /** After the bonus. */
+  contribution: Money
+  inspections: InspectionResult[]
+  issues: IssueResult[]
+}
+
+export interface VendorException {
+  location_id: number
+  location_name: string
+  ref: Ref
+  reason: string
+}
+
+export interface VendorIncentive {
+  vendor_id: number
+  vendor_name: string
+  has_program: boolean
+  bonus_rate: number | null
+  bonus_cap: Money | null
+  targets: Targets | null
+  locations: VendorLocation[]
+  total_bonus: Money
+  total_contribution: Money
+  exceptions: VendorException[]
+}
+
+export interface VendorIncentives {
+  month: string
+  vendors: VendorIncentive[]
+}
+
+/** Exactly one changed service result. */
+export type ResultChange = { inspection_id: number; score: number } | { issue_id: number; customer_caused: boolean }
+
+export interface Simulation {
+  vendor_id: number
+  vendor_name: string
+  location_id: number
+  location_name: string
+  changes: string[]
+  recorded: VendorLocation
+  simulated: VendorLocation
+  eligibility_changed: boolean
+  contribution_change: Money
+}
+
 // ---------------------------------------------------------------- proposed actions
+
+export type ActionType = PlanType | 'renewal_review'
 
 export interface ActionIn {
   location_id: number
-  plan_type: PlanType
+  plan_type: ActionType
   offer_id?: number | null
   fix_id?: number | null
   overrides?: PlanOverrides | null
@@ -380,6 +498,19 @@ export function comparePlans(id: number, overrides?: PlanOverrides, signal?: Abo
     body: overrides ? JSON.stringify(overrides) : undefined,
     signal,
   })
+}
+
+export function getRenewals(signal?: AbortSignal): Promise<RenewalQueue> {
+  return request('/api/renewals', { signal })
+}
+
+export function getVendorIncentives(signal?: AbortSignal): Promise<VendorIncentives> {
+  return request('/api/vendors/incentives', { signal })
+}
+
+/** Recalculates eligibility and contribution with one service result changed. Nothing is saved. */
+export function simulateIncentive(vendorId: number, change: ResultChange, signal?: AbortSignal): Promise<Simulation> {
+  return request(`/api/vendors/${vendorId}/simulate`, { method: 'POST', body: JSON.stringify(change), signal })
 }
 
 export function saveAction(action: ActionIn): Promise<Action> {

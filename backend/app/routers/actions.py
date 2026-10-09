@@ -17,7 +17,7 @@ def save_action(body: ActionIn, db: Session = Depends(get_db)):
         return services.save_action(db, body.location_id, body.plan_type, body.offer_id, body.fix_id, overrides, body.note)
     except services.NotFound as e:
         raise HTTPException(404, str(e))
-    except (services.NotFeasible, services.InvalidOverrides) as e:
+    except (services.NotFeasible, services.InvalidOverrides, services.NotInQueue) as e:
         raise HTTPException(422, str(e))
 
 

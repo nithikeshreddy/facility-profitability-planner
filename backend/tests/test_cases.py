@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app import loaders, models, services
 from app.rules import bundles, plans
-from app.rules.types import Ref
+from app.rules.types import Money, Ref
 
 
 def _option(comparison, plan_type):
@@ -247,3 +247,20 @@ def test_plan_card_totals_add_up_to_the_projection(seeded, ctx):
             if p.plan_type != "vendor_bundle":
                 assert p.sites == []
         assert comparison.current.transition_one_time.amount == 0
+
+
+# ---------------------------------------------------------------- bonus in plan projections
+
+
+def test_plan_projections_assume_the_full_bonus_cap_for_a_bonus_vendor(seeded, ctx, records):
+    """Compare plans charges the full cap (not the earned bonus) when the vendor has a bonus program."""
+    r = records("PHX-01")
+    current, _ = services.contribution(ctx, r)
+    [fix] = loaders.load_fixes_for(seeded, r.site.id)
+    summit = next(v for v in ctx.vendors.values() if v.name == "Summit Janitorial")
+    own = ctx.vendors[r.site.current_vendor_id]
+
+    with_bonus = plans.operational_fix_plan(r, fix, current, summit, ctx.settings, ctx.month)
+    without = plans.operational_fix_plan(r, fix, current, own, ctx.settings, ctx.month)
+    assert with_bonus.bonus == Money(75, "estimated") and without.bonus.amount == 0
+    assert without.projected_contribution.amount - with_bonus.projected_contribution.amount == pytest.approx(75)

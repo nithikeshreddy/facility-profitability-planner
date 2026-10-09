@@ -115,7 +115,10 @@ Routers stay thin: `loaders` (ORM → dataclasses) → `services` (composition) 
 - `GET  /api/overview?state=&loss_only=&detailed_only=` — KPI totals (over the filtered set), states, compact site list for the map
 - `GET  /api/locations/{id}` — contract, service requirements, waterfall, reasonable-cost range + assumptions, diagnosis flags with evidence records, missing evidence, incentive (404 for lightweight sites)
 - `POST /api/locations/{id}/plans` — optional overrides `{local_loaded_wage, margin_low, margin_high, return_visit_reduction, amortization_months}` (ratios 0–1; the margin band is checked against the values in effect → 422) → current, operational fixes, offers/bundles with feasibility, card totals (`monthly_cost`, `bonus`, `transition_monthly`, `transition_one_time`), per-site `sites` for bundles, recommended plan + reasons
-- `POST /api/actions` — `{location_id, plan_type, offer_id?, fix_id?, overrides?, note?}`; projection recomputed server-side; infeasible plan → 422 with its reason. `GET /api/actions?location_id=`
+- `POST /api/actions` — `{location_id, plan_type, offer_id?, fix_id?, overrides?, note?}`; projection recomputed server-side; infeasible plan → 422 with its reason. `plan_type=renewal_review` stores the renewal suggestion (projected = suggested price − cost); 422 if the location is not in the queue or offer/fix/overrides are sent. `GET /api/actions?location_id=`
+- `GET  /api/renewals` — renewal queue `{as_of, target_margin, items}`: estimate range, actual cost, gap, renewal date/days, triggers + reasons, suggested price/frequency/scope review
+- `GET  /api/vendors/incentives` — per vendor: program, targets, each detailed location served (checks vs targets, bonus, contribution before/after bonus, this month's inspections/issues), exceptions
+- `POST /api/vendors/{id}/simulate` — exactly one of `{inspection_id, score}` or `{issue_id, customer_caused}` → `recorded` vs `simulated`; read-only, never writes
 - `POST /api/demo/reset` — `reset_and_seed()`
 
 ## Build order

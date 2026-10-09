@@ -23,6 +23,8 @@ class RenewalInput:
     estimate_low: float | None  # None = no estimate (evidence missing)
     best_contribution: float  # after the best feasible plan (current if none beats it)
     best_plan_name: str = "Current"
+    estimate_high: float | None = None
+    actual_cost: Money | None = None  # this month's direct costs (revenue − current contribution)
 
 
 @dataclass(frozen=True)
@@ -39,13 +41,22 @@ class RenewalItem(RuleResult):
     renewal_date: date | None = None
     days_to_renewal: int = 0
     revenue: Money = Money(0.0, "actual")
+    estimate_low: Money | None = None  # None = no estimate (evidence missing)
+    estimate_high: Money | None = None
+    actual_cost: Money | None = None
     cost_basis: Money = Money(0.0, "estimated")
     monthly_gap: Money = Money(0.0, "estimated")
     suggested_price: Money = Money(0.0, "estimated")
+    projected_contribution: Money = Money(0.0, "estimated")  # at the suggested price
     target_margin: float = 0.10
+    current_frequency_per_week: int = 0
     suggested_frequency_per_week: int | None = None
     triggers: list[str] = field(default_factory=list)  # pricing_scope_problem | loss_after_best_plan
     suggestions: list[Suggestion] = field(default_factory=list)
+
+
+def _estimate(amount: float | None) -> Money | None:
+    return None if amount is None else Money(round(amount, 2), "estimated")
 
 
 def renewal_item(item: RenewalInput, as_of: date, target_margin: float, weeks_per_month: float) -> RenewalItem | None:
@@ -61,7 +72,7 @@ def renewal_item(item: RenewalInput, as_of: date, target_margin: float, weeks_pe
     best_cost = item.revenue - item.best_contribution
     # Price must cover what we pay after the best plan, and at least the reasonable-cost low.
     cost_basis = max(best_cost, item.estimate_low or 0.0)
-    price = cost_basis / (1 - target_margin)
+    price = round(cost_basis / (1 - target_margin), 2)
     gap = cost_basis - item.revenue
     days = (c.renewal_date - as_of).days
 
@@ -81,7 +92,7 @@ def renewal_item(item: RenewalInput, as_of: date, target_margin: float, weeks_pe
     suggestions = [
         Suggestion(
             "price_review",
-            f"Price review: {usd(round(price, 2))}/month reaches a {target_margin:.0%} margin on a "
+            f"Price review: {usd(price)}/month reaches a {target_margin:.0%} margin on a "
             f"{usd(round(cost_basis, 2))} monthly cost (today {usd(item.revenue)}).",
         )
     ]
@@ -112,10 +123,15 @@ def renewal_item(item: RenewalInput, as_of: date, target_margin: float, weeks_pe
         renewal_date=c.renewal_date,
         days_to_renewal=days,
         revenue=Money(item.revenue, "actual"),
+        estimate_low=_estimate(item.estimate_low),
+        estimate_high=_estimate(item.estimate_high),
+        actual_cost=item.actual_cost,
         cost_basis=Money(round(cost_basis, 2), "estimated"),
         monthly_gap=Money(round(gap, 2), "estimated"),
-        suggested_price=Money(round(price, 2), "estimated"),
+        suggested_price=Money(price, "estimated"),
+        projected_contribution=Money(round(price - cost_basis, 2), "estimated"),
         target_margin=target_margin,
+        current_frequency_per_week=c.frequency_per_week,
         suggested_frequency_per_week=freq,
         triggers=triggers,
         suggestions=suggestions,
@@ -127,3 +143,17 @@ def renewal_queue(
 ) -> list[RenewalItem]:
     queue = [r for i in items if (r := renewal_item(i, as_of, target_margin, weeks_per_month)) is not None]
     return sorted(queue, key=lambda r: (r.renewal_date, -r.monthly_gap.amount))
+
+
+def action_summary(item: RenewalItem) -> str:
+    """One-line summary stored with a proposed renewal-review action."""
+    summary = (
+        f"Renewal review: propose {usd(item.suggested_price.amount)}/month ({item.target_margin:.0%} target margin) "
+        f"before renewal on {item.renewal_date.isoformat()} ({item.days_to_renewal} days); today {usd(item.revenue.amount)}."
+    )
+    if item.suggested_frequency_per_week is not None:
+        summary += (
+            f" Alternative: {item.suggested_frequency_per_week} visit(s)/week instead of "
+            f"{item.current_frequency_per_week} at today's price."
+        )
+    return summary

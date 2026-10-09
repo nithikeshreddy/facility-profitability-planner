@@ -1,7 +1,7 @@
 """API workflows through FastAPI's TestClient: open location → evaluate plans → feasibility → save."""
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app import loaders
 from app import models as m
@@ -230,6 +230,153 @@ def test_atlanta_infeasible_offer_cannot_be_saved(client, mutable_db):
     assert response.status_code == 422
     assert response.json()["detail"] == ATLANTA_REASON
     assert client.get("/api/actions").json() == []
+
+
+# ---------------------------------------------------------------- renewal review
+
+
+def test_renewal_queue_has_columbus_but_not_dallas_or_phoenix(client, location_id):
+    body = client.get("/api/renewals").json()
+    items = {i["location_id"]: i for i in body["items"]}
+    assert body["target_margin"] == 0.10
+
+    col = items[location_id("COL-01")]
+    assert col["suggested_price"] == {"amount": 1377.78, "kind": "estimated"}
+    assert "pricing_scope_problem" in col["triggers"]
+    assert col["days_to_renewal"] == pytest.approx(45, abs=3)
+    assert col["revenue"] == {"amount": 900, "kind": "actual"}
+    assert col["actual_cost"] == {"amount": 1240, "kind": "actual"}
+    assert col["estimate_low"]["amount"] > 900 and col["estimate_low"]["amount"] < col["estimate_high"]["amount"]
+    assert col["monthly_gap"]["amount"] == pytest.approx(340)
+    assert {s["key"] for s in col["suggestions"]} == {"price_review", "frequency_review", "scope_review"}
+
+    for code in ("DAL-01", "DAL-02", "DAL-03", "PHX-01"):
+        assert location_id(code) not in items
+
+    keys = [(i["renewal_date"], -i["monthly_gap"]["amount"]) for i in body["items"]]
+    assert keys == sorted(keys)
+
+
+def test_save_renewal_review_action_is_computed_on_the_server(client, mutable_db):
+    col = loaders.location_by_code(mutable_db, "COL-01").id
+    response = client.post("/api/actions", json={"location_id": col, "plan_type": "renewal_review", "note": "Raise at renewal."})
+    assert response.status_code == 201
+    action = response.json()
+    assert action["plan_type"] == "renewal_review"
+    assert action["projected_contribution"] == {"amount": 137.78, "kind": "estimated"}
+    assert "$1,377.78/month" in action["summary"]
+    assert [a["id"] for a in client.get("/api/actions", params={"location_id": col}).json()] == [action["id"]]
+
+
+def test_renewal_review_action_is_rejected_outside_the_queue(client, mutable_db):
+    phx = loaders.location_by_code(mutable_db, "PHX-01").id
+    col = loaders.location_by_code(mutable_db, "COL-01").id
+    response = client.post("/api/actions", json={"location_id": phx, "plan_type": "renewal_review"})
+    assert response.status_code == 422
+    assert "not in the renewal queue" in response.json()["detail"]
+    assert client.post("/api/actions", json={"location_id": col, "plan_type": "renewal_review", "offer_id": 1}).status_code == 422
+    assert client.get("/api/actions").json() == []
+
+
+# ---------------------------------------------------------------- vendor incentives
+
+
+def _vendor(body, name):
+    return next(v for v in body["vendors"] if v["vendor_name"] == name)
+
+
+def _served(vendor, code):
+    return next(l for l in vendor["locations"] if l["code"] == code)
+
+
+@pytest.fixture
+def denver(seeded):
+    """Summit's vendor id, Denver's inspection that scored 92, and its customer-caused missed visit."""
+    loc = loaders.location_by_code(seeded, "DEN-01")
+    inspection = seeded.scalar(select(m.Inspection.id).where(m.Inspection.location_id == loc.id, m.Inspection.score == 92))
+    issue = seeded.scalar(select(m.IssueRecord.id).where(m.IssueRecord.location_id == loc.id, m.IssueRecord.customer_caused))
+    return {"vendor": loc.current_vendor_id, "inspection": inspection, "issue": issue}
+
+
+def test_vendor_incentives_denver_bonus_and_minneapolis_missing_evidence(client, seeded):
+    body = client.get("/api/vendors/incentives").json()
+    summit = _vendor(body, "Summit Janitorial")
+    assert summit["has_program"] and summit["bonus_cap"] == {"amount": 75, "kind": "quoted"}
+    assert summit["targets"] == {"completion_min": 98, "inspection_avg_min": 90, "fix_within_24h_min": 90}
+
+    den = _served(summit, "DEN-01")
+    assert den["incentive"]["eligible"]
+    assert den["incentive"]["bonus"] == {"amount": 67.5, "kind": "estimated"}
+    assert den["contribution"]["amount"] == pytest.approx(182.50)
+    assert den["contribution_before_bonus"]["amount"] == pytest.approx(250)
+    assert {c["key"] for c in den["incentive"]["checks"]} == {"completion", "inspection_avg", "fix_within_24h"}
+    [exception] = [e for e in summit["exceptions"] if e["location_id"] == den["location_id"]]
+    assert exception["ref"]["type"] == "service_visit" and "customer-caused" in exception["reason"]
+
+    msp = _served(summit, "MSP-01")
+    assert not msp["incentive"]["eligible"] and msp["incentive"]["bonus"]["amount"] == 0
+    check = next(c for c in msp["incentive"]["checks"] if c["key"] == "inspection_avg")
+    assert check["actual"] is None and check["detail"].startswith("Evidence missing")
+    assert msp["inspections"] == []
+    assert summit["total_bonus"]["amount"] == pytest.approx(67.5)
+
+    metro = _vendor(body, "Metro Clean Co")
+    assert not metro["has_program"] and metro["bonus_cap"] is None and metro["total_bonus"]["amount"] == 0
+    assert metro["locations"] and all(l["incentive"]["bonus"]["amount"] == 0 for l in metro["locations"])
+
+
+def test_simulate_low_inspection_makes_summit_ineligible(client, denver):
+    body = client.post(f"/api/vendors/{denver['vendor']}/simulate",
+                       json={"inspection_id": denver["inspection"], "score": 85}).json()
+    assert body["recorded"]["incentive"]["eligible"] and body["recorded"]["contribution"]["amount"] == pytest.approx(182.5)
+    assert not body["simulated"]["incentive"]["eligible"]
+    assert body["simulated"]["incentive"]["bonus"]["amount"] == 0
+    assert body["simulated"]["contribution"]["amount"] == pytest.approx(250)
+    assert not next(c for c in body["simulated"]["incentive"]["checks"] if c["key"] == "inspection_avg")["met"]
+    assert body["eligibility_changed"] and body["contribution_change"]["amount"] == pytest.approx(67.5)
+    assert body["changes"] == ["Inspection on 2026-09-17: score 92 → 85."]
+
+
+def test_simulate_unmarking_customer_caused_miss_makes_summit_ineligible(client, denver):
+    body = client.post(f"/api/vendors/{denver['vendor']}/simulate",
+                       json={"issue_id": denver["issue"], "customer_caused": False}).json()
+    assert not body["simulated"]["incentive"]["eligible"]
+    assert body["simulated"]["contribution"]["amount"] == pytest.approx(250)
+    assert not next(c for c in body["simulated"]["incentive"]["checks"] if c["key"] == "completion")["met"]
+    assert body["simulated"]["incentive"]["exceptions"] == []
+    assert "customer-caused → vendor-caused" in body["changes"][0]
+
+
+def test_simulate_never_changes_the_database(client, seeded, denver):
+    def snapshot():
+        seeded.expire_all()
+        return (
+            seeded.execute(select(m.Inspection.id, m.Inspection.score).order_by(m.Inspection.id)).all(),
+            seeded.execute(select(m.IssueRecord.id, m.IssueRecord.customer_caused).order_by(m.IssueRecord.id)).all(),
+            seeded.scalar(select(func.count(m.ProposedAction.id))),
+        )
+
+    before, view = snapshot(), client.get("/api/vendors/incentives").json()
+    for change in ({"inspection_id": denver["inspection"], "score": 85}, {"issue_id": denver["issue"], "customer_caused": False}):
+        assert client.post(f"/api/vendors/{denver['vendor']}/simulate", json=change).status_code == 200
+    assert snapshot() == before
+    assert client.get("/api/vendors/incentives").json() == view
+
+
+def test_simulate_validates_the_change(client, seeded, denver):
+    url = f"/api/vendors/{denver['vendor']}/simulate"
+    assert client.post(url, json={}).status_code == 422
+    assert client.post(url, json={"inspection_id": denver["inspection"]}).status_code == 422
+    assert client.post(url, json={"inspection_id": denver["inspection"], "score": 85,
+                                  "issue_id": denver["issue"], "customer_caused": False}).status_code == 422
+    assert client.post(url, json={"inspection_id": denver["inspection"], "score": 120}).status_code == 422
+
+    dal = loaders.location_by_code(seeded, "DAL-01").id
+    dallas_inspection = seeded.scalar(select(m.Inspection.id).where(m.Inspection.location_id == dal).limit(1))
+    response = client.post(url, json={"inspection_id": dallas_inspection, "score": 50})
+    assert response.status_code == 404 and "does not serve" in response.json()["detail"]
+    assert client.post(url, json={"inspection_id": 999999, "score": 50}).status_code == 404
+    assert client.post("/api/vendors/999/simulate", json={"inspection_id": denver["inspection"], "score": 50}).status_code == 404
 
 
 # ---------------------------------------------------------------- errors

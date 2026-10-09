@@ -71,6 +71,11 @@ def location_by_code(db: Session, code: str) -> m.Location:
     return db.scalars(select(m.Location).where(m.Location.code == code)).one()
 
 
+def location_id_of(db: Session, model, record_id: int) -> int | None:
+    """The location a recorded row (inspection, issue, ...) belongs to; None if there is no such row."""
+    return db.scalar(select(model.location_id).where(model.id == record_id))
+
+
 def detailed_sites(db: Session) -> list[Site]:
     return [site_from(l) for l in db.scalars(select(m.Location).where(m.Location.detailed).order_by(m.Location.id))]
 

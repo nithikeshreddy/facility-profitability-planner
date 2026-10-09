@@ -184,7 +184,7 @@ function RecommendationBanner({
         {pricingReason && (
           <p className="mt-2 text-slate-700">
             <span className="font-medium">Pricing/scope problem:</span> {pricingReason}{' '}
-            <Link to="/renewals" className="font-medium underline hover:text-slate-900">
+            <Link to={`/renewals?location=${comparison.location_id}`} className="font-medium underline hover:text-slate-900">
               Send to renewal review →
             </Link>
           </p>

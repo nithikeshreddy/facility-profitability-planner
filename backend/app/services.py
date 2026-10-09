@@ -9,7 +9,18 @@ from sqlalchemy.orm import Session
 from app import loaders
 from app import models as m
 from app.rules import bundles, diagnosis, evidence, feasibility, finance, incentives, plans, renewals
-from app.rules.types import AssumptionUsed, LocationRecords, Money, Overrides, Settings, Site, Targets, VendorInfo
+from app.rules.types import (
+    AssumptionUsed,
+    LocationRecords,
+    Money,
+    Overrides,
+    Settings,
+    Site,
+    Targets,
+    VendorInfo,
+    combine_kinds,
+    month_of,
+)
 
 
 class NotFound(LookupError):
@@ -21,6 +32,10 @@ class NotFeasible(ValueError):
 
 
 class InvalidOverrides(ValueError):
+    pass
+
+
+class NotInQueue(ValueError):
     pass
 
 
@@ -104,25 +119,39 @@ def _bundle_sites(
     return plans.bundle_site_results(evaluation, stops, by_site, records.site.id)
 
 
+def _renewal_input(db: Session, ctx: Context, records: LocationRecords) -> renewals.RenewalInput | None:
+    if records.contract is None:
+        return None
+    site = records.site
+    cost_range = finance.reasonable_cost_range(site, records.tasks, ctx.settings)
+    current, _ = contribution(ctx, records)
+    comparison = compare_plans(db, ctx, records)
+    return renewals.RenewalInput(
+        location_id=site.id,
+        location_name=site.name,
+        contract=records.contract,
+        revenue=site.revenue_monthly,
+        estimate_low=cost_range.low.amount if cost_range.available else None,
+        estimate_high=cost_range.high.amount if cost_range.available else None,
+        actual_cost=finance.direct_costs(current.revenue, current.total),
+        best_contribution=plans.best_feasible_contribution(comparison),
+        best_plan_name=comparison.best.name if comparison.best else "Current",
+    )
+
+
+def _renewal_item(db: Session, ctx: Context, records: LocationRecords) -> renewals.RenewalItem | None:
+    item = _renewal_input(db, ctx, records)
+    if item is None:
+        return None
+    return renewals.renewal_item(item, ctx.as_of, ctx.settings.target_margin, ctx.settings.weeks_per_month)
+
+
 def renewal_queue(db: Session, ctx: Context) -> list[renewals.RenewalItem]:
     inputs = []
-    for loc in db.scalars(select(m.Location).where(m.Location.detailed).order_by(m.Location.id)):
-        records = loaders.load_records(db, loc.id)
-        if records.contract is None:
-            continue
-        cost_range = finance.reasonable_cost_range(records.site, records.tasks, ctx.settings)
-        comparison = compare_plans(db, ctx, records)
-        inputs.append(renewals.RenewalInput(
-            location_id=loc.id,
-            location_name=loc.name,
-            contract=records.contract,
-            revenue=loc.revenue_monthly,
-            estimate_low=cost_range.low.amount if cost_range.available else None,
-            best_contribution=plans.best_feasible_contribution(comparison),
-            best_plan_name=comparison.best.name if comparison.best else "Current",
-        ))
+    for loc_id in db.scalars(select(m.Location.id).where(m.Location.detailed).order_by(m.Location.id)):
+        if (item := _renewal_input(db, ctx, loaders.load_records(db, loc_id))) is not None:
+            inputs.append(item)
     return renewals.renewal_queue(inputs, ctx.as_of, ctx.settings.target_margin, ctx.settings.weeks_per_month)
-
 
 
 # ---------------------------------------------------------------- API views
@@ -288,6 +317,11 @@ def _find_plan(workbench: dict, plan_type: str, offer_id: int | None, fix_id: in
     raise NotFound(f"No {plan_type.replace('_', ' ')} plan found for location {workbench['location_id']}.")
 
 
+def renewal_view(db: Session) -> dict:
+    ctx = load_context(db)
+    return {"as_of": ctx.as_of, "target_margin": ctx.settings.target_margin, "items": renewal_queue(db, ctx)}
+
+
 def action_view(a: m.ProposedAction) -> dict:
     return {
         **{k: getattr(a, k) for k in ("id", "location_id", "plan_type", "summary", "status", "created_at", "note",
@@ -302,6 +336,10 @@ def save_action(
     overrides: Overrides | None = None, note: str | None = None,
 ) -> dict:
     """Re-run the comparison on the server and store the chosen plan as a proposed action."""
+    if plan_type == "renewal_review":
+        if offer_id is not None or fix_id is not None or overrides is not None:
+            raise InvalidOverrides("A renewal review takes no offer, fix or assumption overrides.")
+        return save_renewal_action(db, location_id, note)
     workbench = plan_workbench(db, location_id, overrides)
     plan = _find_plan(workbench, plan_type, offer_id, fix_id)
     if not plan.feasible:
@@ -318,8 +356,117 @@ def save_action(
     return action_view(action)
 
 
+def save_renewal_action(db: Session, location_id: int, note: str | None = None) -> dict:
+    """Store a renewal review as a proposed action; the suggested price is re-computed on the server."""
+    loc = detailed_location(db, location_id)
+    item = _renewal_item(db, load_context(db), loaders.load_records(db, location_id))
+    if item is None:
+        raise NotInQueue(
+            f"{loc.name} is not in the renewal queue: its reasonable-cost low is not above revenue and it is "
+            "not loss-making after the best feasible plan."
+        )
+    action = m.ProposedAction(
+        location_id=location_id, plan_type="renewal_review", summary=renewals.action_summary(item),
+        projected_contribution=item.projected_contribution.amount, projected_kind=item.projected_contribution.kind,
+        status="proposed", note=note,
+    )
+    db.add(action)
+    db.commit()
+    db.refresh(action)
+    return action_view(action)
+
+
 def list_actions(db: Session, location_id: int | None = None) -> list[dict]:
     query = select(m.ProposedAction).order_by(m.ProposedAction.created_at.desc(), m.ProposedAction.id.desc())
     if location_id is not None:
         query = query.where(m.ProposedAction.location_id == location_id)
     return [action_view(a) for a in db.scalars(query)]
+
+
+# ---------------------------------------------------------------- vendor incentives
+
+
+def _vendor_location(ctx: Context, records: LocationRecords) -> dict:
+    """One location's incentive result, its contribution before and after the bonus, and the service
+    results this month (what a what-if simulation can change)."""
+    site = records.site
+    contrib, inc = contribution(ctx, records)
+    before = finance.contribution(site.revenue_monthly, records.invoices, records.costs, ctx.month)
+    return {
+        **{k: getattr(site, k) for k in ("code", "name", "city", "state")},
+        "location_id": site.id,
+        "incentive": inc,
+        "contribution_before_bonus": before.total,
+        "contribution": contrib.total,
+        "inspections": [i for i in records.inspections if month_of(i.date) == ctx.month],
+        "issues": [i for i in records.issues if month_of(i.date) == ctx.month],
+    }
+
+
+def _money_total(amounts: list[Money], empty_kind: str = "estimated") -> Money:
+    if not amounts:
+        return Money(0.0, empty_kind)
+    return Money(round(sum(a.amount for a in amounts), 2), combine_kinds(*(a.kind for a in amounts)))
+
+
+def vendor_incentives(db: Session) -> dict:
+    """Per vendor: bonus program, targets, and each detailed location it serves with targets vs results."""
+    ctx = load_context(db)
+    served: dict[int, list[int]] = {}
+    for loc in db.scalars(select(m.Location).where(m.Location.detailed).order_by(m.Location.id)):
+        served.setdefault(loc.current_vendor_id, []).append(loc.id)
+
+    vendors = []
+    for vendor in sorted(ctx.vendors.values(), key=lambda v: v.id):
+        locations = [_vendor_location(ctx, loaders.load_records(db, lid)) for lid in served.get(vendor.id, [])]
+        vendors.append({
+            "vendor_id": vendor.id,
+            "vendor_name": vendor.name,
+            "has_program": vendor.has_bonus_program,
+            "bonus_rate": vendor.bonus_rate,
+            "bonus_cap": Money(vendor.bonus_cap, "quoted") if vendor.bonus_cap is not None else None,
+            "targets": ctx.targets.get(vendor.id),
+            "locations": locations,
+            "total_bonus": _money_total([l["incentive"].bonus for l in locations]),
+            "total_contribution": _money_total([l["contribution"] for l in locations], "actual"),
+            "exceptions": [
+                {"location_id": l["location_id"], "location_name": l["name"], "ref": e.ref, "reason": e.reason}
+                for l in locations for e in l["incentive"].exceptions
+            ],
+        })
+    return {"month": ctx.month, "vendors": vendors}
+
+
+def simulate_incentive(db: Session, vendor_id: int, change: incentives.ResultChange) -> dict:
+    """Recalculate eligibility and contribution with one service result changed. Read-only: the change
+    is applied to the loaded records in memory and never written to the database."""
+    ctx = load_context(db)
+    vendor = ctx.vendors.get(vendor_id)
+    if vendor is None:
+        raise NotFound(f"Vendor {vendor_id} not found.")
+    if change.inspection_id is not None:
+        label, model, record_id = "Inspection", m.Inspection, change.inspection_id
+    else:
+        label, model, record_id = "Issue", m.IssueRecord, change.issue_id
+    location_id = loaders.location_id_of(db, model, record_id)
+    if location_id is None:
+        raise NotFound(f"{label} {record_id} not found.")
+    loc = db.get(m.Location, location_id)
+    if loc.current_vendor_id != vendor_id:
+        raise NotFound(f"{label} {record_id} is at {loc.name}, which {vendor.name} does not serve.")
+
+    records = loaders.load_records(db, location_id)
+    changed, described = incentives.apply_change(records, change)
+    recorded, simulated = _vendor_location(ctx, records), _vendor_location(ctx, changed)
+    before, after = recorded["contribution"], simulated["contribution"]
+    return {
+        "vendor_id": vendor.id,
+        "vendor_name": vendor.name,
+        "location_id": loc.id,
+        "location_name": loc.name,
+        "changes": described,
+        "recorded": recorded,
+        "simulated": simulated,
+        "eligibility_changed": recorded["incentive"].eligible != simulated["incentive"].eligible,
+        "contribution_change": Money(round(after.amount - before.amount, 2), combine_kinds(after.kind, before.kind)),
+    }

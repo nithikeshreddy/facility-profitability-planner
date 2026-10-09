@@ -1,7 +1,8 @@
-import { type ReactNode, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { Plan } from '../api'
 import { usd } from '../format'
 import MoneyValue from './MoneyValue'
+import SaveActionButton from './SaveActionButton'
 
 const TYPE_LABELS: Record<Plan['plan_type'], string> = {
   current: 'Current',
@@ -151,79 +152,13 @@ function Feasibility({ plan }: { plan: Plan }) {
 }
 
 function SaveFooter({ plan, onSave }: { plan: Plan; onSave: (plan: Plan, note: string) => Promise<void> }) {
-  const [open, setOpen] = useState(false)
-  const [note, setNote] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const blocked = plan.feasible ? null : plan.reasons[0]
-
-  async function confirm() {
-    setSaving(true)
-    setError(null)
-    try {
-      await onSave(plan, note)
-      setOpen(false)
-      setNote('')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save the proposed action.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   return (
     <footer className="border-t border-slate-100 px-5 py-3">
-      {!open ? (
-        <>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            disabled={blocked !== null}
-            title={blocked ?? undefined}
-            className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
-          >
-            Save proposed action
-          </button>
-          {blocked && <p className="mt-2 text-xs text-red-800">Cannot be saved: {blocked}</p>}
-        </>
-      ) : (
-        <div className="space-y-2">
-          <label className="block text-xs font-medium text-slate-600">
-            Note for the approving manager (optional)
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              maxLength={2000}
-              rows={3}
-              className="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm font-normal text-slate-900"
-              placeholder="e.g. Confirm the lockbox code with the site manager."
-            />
-          </label>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={confirm}
-              disabled={saving}
-              className="flex-1 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60"
-            >
-              {saving ? 'Saving…' : 'Confirm save'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              disabled={saving}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
-            >
-              Cancel
-            </button>
-          </div>
-          {error && (
-            <p role="alert" className="text-xs text-red-800">
-              {error}
-            </p>
-          )}
-        </div>
-      )}
+      <SaveActionButton
+        onSave={(note) => onSave(plan, note)}
+        blockedReason={plan.feasible ? null : plan.reasons[0]}
+        placeholder="e.g. Confirm the lockbox code with the site manager."
+      />
     </footer>
   )
 }
