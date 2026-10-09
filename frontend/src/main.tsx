@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import 'leaflet/dist/leaflet.css'
 import './index.css'
 import Layout from './components/Layout.tsx'
+import About from './pages/About.tsx'
 import ComparePlans from './pages/ComparePlans.tsx'
 import LocationDetails from './pages/LocationDetails.tsx'
 import Overview from './pages/Overview.tsx'
@@ -21,6 +22,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="compare" element={<ComparePlans />} />
           <Route path="renewals" element={<RenewalReview />} />
           <Route path="incentives" element={<VendorIncentives />} />
+          <Route path="about" element={<About />} />
         </Route>
       </Routes>
     </BrowserRouter>

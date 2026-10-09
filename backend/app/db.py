@@ -7,7 +7,18 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "facility.db"
-DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
+
+
+def _database_url() -> tuple[str, Path | None]:
+    """DATABASE_URL wins (tests use in-memory "sqlite://"); otherwise a SQLite file at DATABASE_PATH."""
+    if url := os.environ.get("DATABASE_URL"):
+        return url, None
+    path = Path(os.environ.get("DATABASE_PATH") or DEFAULT_DB_PATH).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return f"sqlite:///{path}", path
+
+
+DATABASE_URL, DB_FILE = _database_url()
 
 
 def _make_engine(url: str):

@@ -13,7 +13,7 @@ import {
 import Card from '../components/Card'
 import MoneyValue from '../components/MoneyValue'
 import { ErrorMessage, Loading } from '../components/StatusMessage'
-import { formatDate, formatMonth } from '../format'
+import { formatDate, formatMonth, number, percent } from '../format'
 import { useApi } from '../useApi'
 
 function unit(key: string): string {
@@ -21,7 +21,7 @@ function unit(key: string): string {
 }
 
 function value(n: number, key: string): string {
-  return `${Number.isInteger(n) ? n : n.toFixed(1)}${unit(key)}`
+  return `${number(n, 1)}${unit(key)}`
 }
 
 export default function VendorIncentives() {
@@ -56,7 +56,7 @@ function ProgramVendorCard({ vendor }: { vendor: VendorIncentive }) {
       title={vendor.vendor_name}
       subtitle={
         <>
-          Bonus program: {Math.round((vendor.bonus_rate ?? 0) * 1000) / 10}% of the monthly invoice, capped at{' '}
+          Bonus program: {percent(vendor.bonus_rate ?? 0)} of the monthly invoice, capped at{' '}
           {vendor.bonus_cap && <MoneyValue money={vendor.bonus_cap} compact />}
           {t ? (
             <span className="mt-1.5 flex flex-wrap gap-1.5">

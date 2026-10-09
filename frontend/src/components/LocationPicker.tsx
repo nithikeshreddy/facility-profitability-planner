@@ -22,6 +22,12 @@ export default function LocationPicker({ title, description, sites, error, hrefF
       </header>
       {error && <ErrorMessage error={error} />}
       {!sites && !error && <Loading />}
+      {sites && sites.length === 0 && (
+        <p className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+          No detailed locations in the current data. Use <span className="font-medium">Reset demo</span> to reload the
+          demonstration data.
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-3">
         {sorted.map((s) => (
           <Link

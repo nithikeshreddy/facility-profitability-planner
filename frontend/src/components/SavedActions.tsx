@@ -1,16 +1,16 @@
 import { Link } from 'react-router-dom'
 import { listActions } from '../api'
-import { formatDateTime } from '../format'
+import { formatDateTime, percent, usd } from '../format'
 import { useApi } from '../useApi'
 import Card from './Card'
 import MoneyValue from './MoneyValue'
 import { ErrorMessage, Loading } from './StatusMessage'
 
 const OVERRIDE_LABELS: Record<string, (v: number) => string> = {
-  local_loaded_wage: (v) => `wage $${v}/hr`,
-  margin_low: (v) => `margin low ${Math.round(v * 1000) / 10}%`,
-  margin_high: (v) => `margin high ${Math.round(v * 1000) / 10}%`,
-  return_visit_reduction: (v) => `return visits removed ${Math.round(v * 1000) / 10}%`,
+  local_loaded_wage: (v) => `wage ${usd(v)}/hr`,
+  margin_low: (v) => `margin low ${percent(v)}`,
+  margin_high: (v) => `margin high ${percent(v)}`,
+  return_visit_reduction: (v) => `return visits removed ${percent(v)}`,
   amortization_months: (v) => `amortized over ${v} months`,
 }
 

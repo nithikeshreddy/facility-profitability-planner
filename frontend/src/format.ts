@@ -43,11 +43,16 @@ export function number(n: number, digits = 2): string {
   return n.toLocaleString('en-US', { maximumFractionDigits: digits })
 }
 
+/** Ratio → percent: 0.1 → "10%", 0.125 → "12.5%". */
+export function percent(ratio: number, digits = 1): string {
+  return `${number(ratio * 100, digits)}%`
+}
+
 /** An assumption's value in its unit: 15%, $22/hr, 12 months. */
 export function formatAssumption(a: Assumption): string {
   switch (a.unit) {
     case 'ratio':
-      return `${number(a.value * 100, 1)}%`
+      return percent(a.value)
     case 'USD':
       return usd(a.value)
     case 'USD/hr':

@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import type { Site } from '../api'
 import { DETAIL_OUTLINE, LOSS, PROFIT } from '../colors'
 import { usd } from '../format'
+import KindBadge from './KindBadge'
 import OsmTileLayer from './OsmTileLayer'
 import SiteSummaryCard from './SiteSummaryCard'
 
@@ -88,7 +89,10 @@ const Markers = memo(function Markers({
             eventHandlers={{ click: () => navigate(`/locations/${s.id}`) }}
           >
             <Tooltip direction="top" offset={[0, -8]}>
-              <span className="font-medium">{s.name}</span> · {usd(s.contribution.amount)} contribution
+              <span className="inline-flex items-center gap-1">
+                <span className="font-medium">{s.name}</span> · {usd(s.contribution.amount)}
+                <KindBadge kind={s.contribution.kind} compact /> contribution
+              </span>
               <br />
               <span className="text-slate-500">Click to open location details</span>
             </Tooltip>

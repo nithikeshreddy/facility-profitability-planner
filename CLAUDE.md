@@ -29,7 +29,7 @@ Prototype for the abrightlab 2,000-Location Challenge. An operations manager can
 | Backend | Python 3.11+, FastAPI, Pydantic v2 |
 | Database | SQLite via SQLAlchemy 2.x |
 | Tests | pytest (backend). Optional: Vitest for a couple of frontend utilities |
-| Deployment | One service: FastAPI serves `/api/*` and the built frontend from `frontend/dist` |
+| Deployment | One service: FastAPI serves `/api/*` and the built frontend from `frontend/dist` (non-file paths → `index.html`; unknown `/api/*` → JSON 404). `./build.sh` + `./start.sh` (`$PORT`), or the multi-stage `Dockerfile` |
 
 ## Repo layout
 
@@ -38,8 +38,8 @@ facility-planner/
   CLAUDE.md  README.md  docs/SPEC.md
   backend/
     app/
-      main.py         # FastAPI app, mounts API routers + static frontend/dist (if built)
-      db.py           # engine, SessionLocal, Base, get_db
+      main.py         # FastAPI app: API routers, seed-on-startup if DB empty, SPA fallback for frontend/dist
+      db.py           # engine, SessionLocal, Base, get_db (DATABASE_URL, else DATABASE_PATH)
       models.py       # SQLAlchemy models                       (build step 1)
       schemas.py      # Pydantic request/response models         (build step 1)
       seed.py         # deterministic synthetic data             (build step 1)
@@ -48,11 +48,12 @@ facility-planner/
       routers/        # one router per area (health.py exists)
     tests/            # pytest
     requirements.txt  pytest.ini
-    facility.db       # SQLite file (git-ignored; override with DATABASE_URL)
+    facility.db       # SQLite file (git-ignored; DATABASE_PATH or DATABASE_URL override)
   frontend/
     src/
       components/Layout.tsx   # left nav, "Demonstration data" banner, Reset demo
-      pages/                  # Overview, LocationDetails, ComparePlans, RenewalReview, VendorIncentives
+      pages/                  # Overview, LocationDetails, ComparePlans, RenewalReview, VendorIncentives, About
+  build.sh  start.sh  Dockerfile  .dockerignore
 ```
 
 ## Core formulas (all monthly, USD)
@@ -107,6 +108,7 @@ Shared layout: left nav, "Demonstration data" banner, **Reset demo** button.
 3. **Compare plans** (`/compare`) — current vs operational fix vs offers/bundles; editable assumptions re-run via API; feasibility with reasons; **Save proposed action**.
 4. **Renewal review** (`/renewals`) — queue + suggested price/scope/frequency review.
 5. **Vendor incentives** (`/incentives`) — targets vs results, eligibility, bonus, exceptions, toggle one service result.
+6. **About this demo** (`/about`) — method, settled interpretations, links to each demo case (resolved by location code). Explains formulas only; no computed figures.
 
 ## API (`backend/app/routers/`, schemas in `app/schemas.py`)
 
@@ -143,4 +145,9 @@ python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt
 npm install
 npm run dev
 npm run build
+npm run lint
+
+# Single service (from repo root) — FastAPI serves API + frontend/dist on $PORT
+./build.sh && ./start.sh
+docker build -t facility-planner . && docker run --rm -p 8000:8000 facility-planner
 ```

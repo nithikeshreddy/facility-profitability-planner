@@ -4,6 +4,7 @@ import { MapContainer, Marker, Polyline, Tooltip } from 'react-leaflet'
 import type { BundleSite } from '../api'
 import { DETAIL_OUTLINE, LOSS, PROFIT } from '../colors'
 import { usd } from '../format'
+import KindBadge from './KindBadge'
 import OsmTileLayer from './OsmTileLayer'
 
 /** Small route map for a vendor bundle: numbered stops in route order, colored by projected contribution. */
@@ -28,7 +29,10 @@ export default function BundleMap({ sites }: { sites: BundleSite[] }) {
                 Stop {i + 1}: {s.location_name}
               </span>
               <br />
-              {usd(s.current_contribution.amount)} → {usd(s.projected_contribution.amount)} projected
+              <span className="inline-flex items-center gap-1">
+                {usd(s.current_contribution.amount)} <KindBadge kind={s.current_contribution.kind} compact /> →{' '}
+                {usd(s.projected_contribution.amount)} <KindBadge kind={s.projected_contribution.kind} compact /> projected
+              </span>
             </Tooltip>
           </Marker>
         ))}

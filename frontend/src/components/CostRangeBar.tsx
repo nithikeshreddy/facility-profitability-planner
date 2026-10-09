@@ -25,7 +25,7 @@ export default function CostRangeBar({ revenue, actual, range }: Props) {
     <div>
       <div className="relative mx-1 pb-6 pt-7">
         {/* actual-cost label above the track */}
-        <Marker at={x(actual.amount)} color={ACTUAL_FILL} label={`Actual ${usd(actual.amount)}`} position="top" />
+        <Marker at={x(actual.amount)} color={ACTUAL_FILL} label="Actual" money={actual} position="top" />
         <div className="relative h-8 rounded bg-slate-100">
           <div
             className="absolute inset-y-0 rounded-sm"
@@ -39,7 +39,7 @@ export default function CostRangeBar({ revenue, actual, range }: Props) {
           <Tick at={x(actual.amount)} color={ACTUAL_FILL} width={3} title={`Actual cleaning cost ${usd(actual.amount)}`} />
           <Tick at={x(revenue.amount)} color={REVENUE_FILL} width={2} dashed title={`Revenue ${usd(revenue.amount)}`} />
         </div>
-        <Marker at={x(revenue.amount)} color={REVENUE_FILL} label={`Revenue ${usd(revenue.amount)}`} position="bottom" />
+        <Marker at={x(revenue.amount)} color={REVENUE_FILL} label="Revenue" money={revenue} position="bottom" />
       </div>
       <div className="relative mx-1 h-4 text-[10px] text-slate-400">
         {ticks.map((t) => (
@@ -90,13 +90,15 @@ function Tick({ at, color, width, dashed, title }: { at: string; color: string; 
   )
 }
 
-function Marker({ at, color, label, position }: { at: string; color: string; label: string; position: 'top' | 'bottom' }) {
+function Marker(props: { at: string; color: string; label: string; money: Money; position: 'top' | 'bottom' }) {
+  const { at, color, label, money, position } = props
   return (
     <span
-      className={`absolute -translate-x-1/2 whitespace-nowrap text-[11px] font-medium ${position === 'top' ? 'top-1' : 'bottom-0'}`}
-      style={{ left: `clamp(3rem, ${at}, calc(100% - 3rem))`, color }}
+      className={`absolute inline-flex -translate-x-1/2 items-center gap-1 whitespace-nowrap text-[11px] font-medium ${position === 'top' ? 'top-1' : 'bottom-0'}`}
+      style={{ left: `clamp(4rem, ${at}, calc(100% - 4rem))`, color }}
     >
-      {label}
+      {label} {usd(money.amount)}
+      <KindBadge kind={money.kind} compact />
     </span>
   )
 }

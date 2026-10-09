@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 import type { Plan } from '../api'
-import { usd } from '../format'
 import MoneyValue from './MoneyValue'
 import SaveActionButton from './SaveActionButton'
 
@@ -55,8 +54,8 @@ export default function PlanCard({ plan, best = false, onSave }: Props) {
               <span className="flex flex-col items-end">
                 <MoneyValue money={plan.transition_monthly} />
                 <span className="text-xs text-slate-500">
-                  {usd(plan.transition_one_time.amount)} one-time{plan.plan_type === 'vendor_bundle' ? ' for the bundle' : ''},
-                  amortized
+                  <MoneyValue money={plan.transition_one_time} compact /> one-time
+                  {plan.plan_type === 'vendor_bundle' ? ' for the bundle' : ''}, amortized
                 </span>
               </span>
             ) : (

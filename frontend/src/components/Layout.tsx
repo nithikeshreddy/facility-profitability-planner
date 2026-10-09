@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { to: '/compare', label: 'Compare plans' },
   { to: '/renewals', label: 'Renewal review' },
   { to: '/incentives', label: 'Vendor incentives' },
+  { to: '/about', label: 'About this demo' },
 ]
 
 export default function Layout() {

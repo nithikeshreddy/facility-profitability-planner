@@ -5,7 +5,7 @@ import Card from '../components/Card'
 import MoneyValue from '../components/MoneyValue'
 import SaveActionButton from '../components/SaveActionButton'
 import { ErrorMessage, Loading } from '../components/StatusMessage'
-import { formatDate } from '../format'
+import { formatDate, percent } from '../format'
 import { type LayoutContext, useApi } from '../useApi'
 
 const TRIGGERS: Record<RenewalTrigger, { label: string; style: string }> = {
@@ -14,10 +14,6 @@ const TRIGGERS: Record<RenewalTrigger, { label: string; style: string }> = {
 }
 
 const COLUMNS = ['Location', 'Revenue', 'Reasonable cost', 'Actual cost', 'Monthly gap', 'Renewal']
-
-function percent(ratio: number): string {
-  return `${Math.round(ratio * 1000) / 10}%`
-}
 
 function days(n: number): string {
   if (n === 0) return 'today'
