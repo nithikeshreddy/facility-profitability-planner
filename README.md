@@ -35,7 +35,7 @@ The seed data reproduces these from records; no result is hardcoded. IDs are sta
 |---|---|---|---|
 | 1 | **Suitable vendor bundle** — 3 Dallas sites within ~5 mi, served by two vendors driving out separately | [Compare plans → Dallas Uptown](https://facility-planner.onrender.com/compare?location=1) (`DAL-01`, also `DAL-02`/`DAL-03`) | Metro Clean Co's bundle ($3,150/mo for three, $300 transition) is feasible; each site goes from −$150 to about +$42 projected |
 | 2 | **Operational fix** — Phoenix, return visits caused by a locked stockroom | [Location details](https://facility-planner.onrender.com/locations/4) and [Compare plans](https://facility-planner.onrender.com/compare?location=4) (`PHX-01`) | Contribution −$260 with four dated `access` issues; a $150 lockbox removes ~90% of return visits → about +$70 projected, no vendor change |
-| 3 | **Underpriced agreement** — Columbus | [Location details](https://facility-planner.onrender.com/locations/5) and [Renewal review](https://facility-planner.onrender.com/renewals) (`COL-01`) | The reasonable-cost estimate (≈ $1,150–$1,300) exceeds $900 revenue, so it is a pricing/scope problem. Renewal is ~45 days out, with a suggested price |
+| 3 | **Underpriced agreement** — Columbus | [Location details](https://facility-planner.onrender.com/locations/5) and [Renewal review](https://facility-planner.onrender.com/renewals) (`COL-01`) | The reasonable-cost estimate (≈ $1,150–$1,300) exceeds $900 revenue, so it is a pricing/scope problem. Renewal is ~45 days out, with a suggested price of $1,377.78 |
 | 4 | **Infeasible cheap offer** — Atlanta, 22:00–01:00 window | [Compare plans](https://facility-planner.onrender.com/compare?location=6) (`ATL-01`) | Budget Shine's $1,050 offer is rejected: *"This offer is cheaper, but its crew requires 225 minutes within a 180-minute service window."* It cannot be saved |
 | 5 | **Performance bonus** — Denver, Summit Janitorial | [Vendor incentives](https://facility-planner.onrender.com/incentives) (`DEN-01`) | Bonus $67.50, contribution $182.50. Lower one inspection below target, or un-mark the customer-caused miss, and the vendor becomes ineligible; contribution updates |
 
@@ -99,7 +99,7 @@ Open http://localhost:5173.
 ./start.sh   # uvicorn on 0.0.0.0:$PORT (default 8000)
 ```
 
-Open http:localhost:8000. FastAPI serves `/api/*` and the built frontend. Any other path that is not a real file returns `index.html`, so direct links like `/compare?location=1` work. Unknown `/api/*` paths return a JSON 404. API docs are at `/docs`.
+Open http://localhost:8000. FastAPI serves `/api/*` and the built frontend. Any other path that is not a real file returns `index.html`, so direct links like `/compare?location=1` work. Unknown `/api/*` paths return a JSON 404. API docs are at `/docs`.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -117,7 +117,7 @@ Multi-stage image: a Node build stage, then a slim Python runtime running as a n
 ```bash
 docker build -t facility-planner .
 docker run --rm -p 8000:8000 facility-planner                 # http://localhost:8000
-docker run --rm -p 9000:9000 -e PORT=9000 facility-planner     # # http://localhost:8000
+docker run --rm -p 9000:9000 -e PORT=9000 facility-planner      # http://localhost:9000
 docker run --rm -p 8000:8000 -v fp-data:/data facility-planner # keep the database across restarts
 ```
 
