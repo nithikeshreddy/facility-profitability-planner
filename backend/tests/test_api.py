@@ -85,6 +85,42 @@ def test_phoenix_plans_recommend_lockbox(client, location_id):
     assert body["recommendation_reasons"][0].startswith("Best plan: Install stockroom lockbox")
 
 
+
+def test_phoenix_plan_card_totals(client, location_id):
+    body = client.post(f"/api/locations/{location_id('PHX-01')}/plans").json()
+
+    current = body["current"]
+    assert current["monthly_cost"] == {"amount": 1760, "kind": "actual"}  # 1,380 invoice + 380 return visits
+    assert current["transition_one_time"]["amount"] == 0 and current["sites"] == []
+
+    fix = _option(body, "operational_fix")
+    assert fix["monthly_cost"] == {"amount": pytest.approx(1380 + 38), "kind": "estimated"}  # 90% of visits removed
+    assert fix["transition_one_time"] == {"amount": 150, "kind": "estimated"}
+    assert fix["transition_monthly"]["amount"] == pytest.approx(12.5)
+    assert fix["bonus"]["amount"] == 0
+    assert fix["sites"] == []
+
+
+def test_dallas_bundle_returns_per_site_results(client, location_id):
+    dal = location_id("DAL-01")
+    url = f"/api/locations/{dal}/plans"
+    bundle = _option(client.post(url).json(), "vendor_bundle")
+
+    assert bundle["transition_one_time"] == {"amount": 300, "kind": "quoted"}
+    assert len(bundle["sites"]) == 3
+    assert [s["location_id"] for s in bundle["sites"] if s["is_this_location"]] == [dal]
+    for s in bundle["sites"]:
+        assert {"lat", "lng", "location_name", "fits", "required_minutes", "window_minutes"} <= set(s)
+        assert s["current_contribution"]["amount"] == pytest.approx(-150)
+        assert s["projected_contribution"]["amount"] == pytest.approx(42, abs=1)
+
+    six = _option(client.post(url, json={"amortization_months": 6}).json(), "vendor_bundle")
+    assert six["transition_monthly"]["amount"] == pytest.approx(300 / 6 / 3, abs=0.01)
+    for before, after in zip(bundle["sites"], six["sites"]):
+        assert before["projected_contribution"]["amount"] - after["projected_contribution"]["amount"] == (
+            pytest.approx(300 / 12 / 3, abs=0.01)
+        )
+
 def test_phoenix_overrides_rerun_the_calculation(client, location_id):
     url = f"/api/locations/{location_id('PHX-01')}/plans"
 
@@ -112,6 +148,17 @@ def test_plan_overrides_are_validated(client, location_id):
     assert client.post(url, json={"margin_low": 0.3, "margin_high": 0.2}).status_code == 422
     assert client.post(url, json={"return_visit_reduction": 1.5}).status_code == 422
     assert client.post(url, json={"amortization_months": 0}).status_code == 422
+
+
+def test_one_margin_override_is_checked_against_the_recorded_other_end(client, location_id):
+    phx = location_id("PHX-01")
+    response = client.post(f"/api/locations/{phx}/plans", json={"margin_low": 0.4})  # recorded high end is lower
+    assert response.status_code == 422
+    assert "must not exceed the high end" in response.json()["detail"]
+
+    action = client.post("/api/actions", json={"location_id": phx, "plan_type": "operational_fix",
+                                               "overrides": {"margin_high": 0.05}})
+    assert action.status_code == 422
 
 
 def test_phoenix_save_proposed_action(client, mutable_db):
@@ -142,6 +189,22 @@ def test_saved_action_uses_its_overrides(client, mutable_db):
     assert action["projected_contribution"]["amount"] == pytest.approx(-82.5)
     assert action["overrides"] == {"return_visit_reduction": 0.5}
 
+
+
+def test_actions_are_listed_per_location_and_cleared_by_reset(client, mutable_db):
+    phx = loaders.location_by_code(mutable_db, "PHX-01").id
+    dal = loaders.location_by_code(mutable_db, "DAL-01").id
+    client.post("/api/actions", json={"location_id": phx, "plan_type": "operational_fix", "note": "Lockbox first."})
+    saved = client.post("/api/actions", json={"location_id": dal, "plan_type": "vendor_bundle"}).json()
+
+    listed = client.get("/api/actions", params={"location_id": dal}).json()
+    assert [a["id"] for a in listed] == [saved["id"]]
+    assert listed[0]["note"] is None and listed[0]["projected_contribution"]["kind"] == "quoted"
+    assert [a["note"] for a in client.get("/api/actions", params={"location_id": phx}).json()] == ["Lockbox first."]
+
+    client.post("/api/demo/reset")
+    assert client.get("/api/actions", params={"location_id": dal}).json() == []
+    assert client.get("/api/actions", params={"location_id": phx}).json() == []
 
 # ---------------------------------------------------------------- Atlanta workflow
 

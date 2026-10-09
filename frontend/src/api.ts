@@ -231,6 +231,21 @@ export interface Feasibility {
   reasons: string[]
 }
 
+/** One stop of a vendor bundle: its route check and its own share of the offer. */
+export interface BundleSite {
+  location_id: number
+  location_name: string
+  lat: number
+  lng: number
+  is_this_location: boolean
+  fits: boolean
+  required_minutes: number
+  window_minutes: number | null
+  current_contribution: Money
+  projected_contribution: Money
+  change: Money
+}
+
 export interface Plan {
   plan_type: PlanType
   name: string
@@ -242,12 +257,20 @@ export interface Plan {
   recommended: boolean
   revenue: Money
   lines: Line[]
+  /** Vendor cost + other direct costs + return visits + credits. */
+  monthly_cost: Money
+  bonus: Money
+  transition_monthly: Money
+  /** Whole fix or whole offer, before amortization. */
+  transition_one_time: Money
   projected_contribution: Money
   current_contribution: Money
   change: Money
   offer_id: number | null
   fix_id: number | null
   feasibility: Feasibility | null
+  /** Per-site results; bundles only. */
+  sites: BundleSite[]
   reasons: string[]
   evidence: Ref[]
 }

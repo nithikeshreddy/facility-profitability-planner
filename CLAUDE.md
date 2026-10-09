@@ -114,7 +114,7 @@ Routers stay thin: `loaders` (ORM → dataclasses) → `services` (composition) 
 
 - `GET  /api/overview?state=&loss_only=&detailed_only=` — KPI totals (over the filtered set), states, compact site list for the map
 - `GET  /api/locations/{id}` — contract, service requirements, waterfall, reasonable-cost range + assumptions, diagnosis flags with evidence records, missing evidence, incentive (404 for lightweight sites)
-- `POST /api/locations/{id}/plans` — optional overrides `{local_loaded_wage, margin_low, margin_high, return_visit_reduction, amortization_months}` (ratios 0–1) → current, operational fixes, offers/bundles with feasibility, recommended plan + reasons
+- `POST /api/locations/{id}/plans` — optional overrides `{local_loaded_wage, margin_low, margin_high, return_visit_reduction, amortization_months}` (ratios 0–1; the margin band is checked against the values in effect → 422) → current, operational fixes, offers/bundles with feasibility, card totals (`monthly_cost`, `bonus`, `transition_monthly`, `transition_one_time`), per-site `sites` for bundles, recommended plan + reasons
 - `POST /api/actions` — `{location_id, plan_type, offer_id?, fix_id?, overrides?, note?}`; projection recomputed server-side; infeasible plan → 422 with its reason. `GET /api/actions?location_id=`
 - `POST /api/demo/reset` — `reset_and_seed()`
 

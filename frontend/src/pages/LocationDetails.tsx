@@ -1,13 +1,16 @@
 import type { ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { type Assumption, getLocation, getOverview, type LocationDetail, type Money, type Site } from '../api'
+import { getLocation, getOverview, type LocationDetail, type Money, type Site } from '../api'
 import Card from '../components/Card'
 import ContributionWaterfall from '../components/ContributionWaterfall'
 import CostRangeBar from '../components/CostRangeBar'
 import DiagnosisPanel from '../components/DiagnosisPanel'
+import LocationPicker from '../components/LocationPicker'
+import LocationSwitcher from '../components/LocationSwitcher'
 import MoneyValue from '../components/MoneyValue'
+import SavedActions from '../components/SavedActions'
 import { ErrorMessage, Loading } from '../components/StatusMessage'
-import { count, formatDate, formatMonth, minutes, number, usd } from '../format'
+import { count, formatAssumption, formatDate, formatMonth, minutes, number } from '../format'
 import { useApi } from '../useApi'
 
 export default function LocationDetails() {
@@ -16,55 +19,17 @@ export default function LocationDetails() {
   const detailedSites = useApi((signal) => getOverview({ detailed_only: true }, signal), [])
 
   if (locationId === null || Number.isNaN(locationId)) {
-    return <LocationPicker sites={detailedSites.data?.sites} error={detailedSites.error} />
+    return (
+      <LocationPicker
+        title="Location details"
+        description="Choose one of the detailed locations to inspect its contribution, reasonable cost and evidence. Loss-making sites are listed first."
+        sites={detailedSites.data?.sites}
+        error={detailedSites.error}
+        hrefFor={(siteId) => `/locations/${siteId}`}
+      />
+    )
   }
   return <LocationView locationId={locationId} sites={detailedSites.data?.sites ?? []} />
-}
-
-// ---------------------------------------------------------------- picker (no location selected)
-
-function LocationPicker({ sites, error }: { sites: Site[] | undefined; error: Error | null }) {
-  const sorted = sites ? [...sites].sort((a, b) => a.contribution.amount - b.contribution.amount) : []
-  return (
-    <div className="mx-auto max-w-7xl space-y-5">
-      <header>
-        <h1 className="text-2xl font-semibold">Location details</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Choose one of the detailed locations to inspect its contribution, reasonable cost and evidence. Loss-making
-          sites are listed first.
-        </p>
-      </header>
-      {error && <ErrorMessage error={error} />}
-      {!sites && !error && <Loading />}
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-3">
-        {sorted.map((s) => (
-          <Link
-            key={s.id}
-            to={`/locations/${s.id}`}
-            className="group rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-slate-400 hover:shadow"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="font-medium text-slate-900 group-hover:underline">{s.name}</div>
-                <div className="text-xs text-slate-500">
-                  {s.code} · {s.city}, {s.state}
-                </div>
-              </div>
-              <MoneyValue money={s.contribution} signed className="text-sm font-semibold" />
-            </div>
-            <div className="mt-2 flex gap-4 text-xs text-slate-500">
-              <span>
-                Revenue <MoneyValue money={s.revenue} compact />
-              </span>
-              <span>
-                Costs <MoneyValue money={s.direct_costs} compact />
-              </span>
-            </div>
-          </Link>
-        ))}
-      </div>
-    </div>
-  )
 }
 
 // ---------------------------------------------------------------- one location
@@ -73,22 +38,8 @@ function LocationView({ locationId, sites }: { locationId: number; sites: Site[]
   const navigate = useNavigate()
   const { data, error, loading } = useApi((signal) => getLocation(locationId, signal), [locationId])
 
-  const switcher = sites.length > 0 && (
-    <label className="flex items-center gap-2 text-sm">
-      <span className="text-slate-500">Location</span>
-      <select
-        value={locationId}
-        onChange={(e) => navigate(`/locations/${e.target.value}`)}
-        className="max-w-64 rounded border border-slate-300 bg-white px-2 py-1 text-sm"
-      >
-        {!sites.some((s) => s.id === locationId) && <option value={locationId}>Location {locationId}</option>}
-        {sites.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-          </option>
-        ))}
-      </select>
-    </label>
+  const switcher = (
+    <LocationSwitcher sites={sites} value={locationId} onChange={(siteId) => navigate(`/locations/${siteId}`)} />
   )
 
   if (error) {
@@ -170,6 +121,8 @@ function LocationView({ locationId, sites }: { locationId: number; sites: Site[]
           missing={data.missing_evidence.map((m) => m.message)}
         />
       </Card>
+
+      <SavedActions locationId={data.location.id} />
 
       {data.reasonable_cost.available && <CostBuildUp detail={data} />}
 
@@ -293,21 +246,6 @@ function CostBuildUp({ detail }: { detail: LocationDetail }) {
       </div>
     </Card>
   )
-}
-
-function formatAssumption(a: Assumption): string {
-  switch (a.unit) {
-    case 'ratio':
-      return `${number(a.value * 100, 1)}%`
-    case 'USD':
-      return usd(a.value)
-    case 'USD/hr':
-      return `${usd(a.value)}/hr`
-    case 'min':
-      return minutes(a.value)
-    default:
-      return `${number(a.value)} ${a.unit}`
-  }
 }
 
 function ContractCard({ detail }: { detail: LocationDetail }) {

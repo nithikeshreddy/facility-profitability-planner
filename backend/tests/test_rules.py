@@ -11,6 +11,7 @@ from app.rules.types import (
     InspectionRec,
     InvoiceLine,
     Issue,
+    Line,
     LocationRecords,
     Money,
     Ref,
@@ -164,3 +165,19 @@ def test_action_summary_template():
     assert plans.action_summary(plan) == (
         "Install stockroom lockbox: projected contribution $69.50 vs current −$260 per month."
     )
+
+
+def test_plan_totals_split_monthly_cost_bonus_and_transition():
+    lines = [
+        Line("vendor_invoices", "Vendor", Money(1000, "quoted")),
+        Line("other_direct", "Other", Money(50, "actual")),
+        Line("return_visits", "Return visits", Money(0, "estimated")),
+        Line("credits", "Credits", Money(20, "actual")),
+        Line("vendor_bonus", "Bonus", Money(75, "estimated")),
+        Line("transition", "Transition", Money(12.5, "quoted")),
+    ]
+    monthly, bonus, transition = plans.plan_totals(lines)
+    assert monthly == Money(1070, "quoted")  # zero lines do not weaken the kind
+    assert bonus == Money(75, "estimated")
+    assert transition == Money(12.5, "quoted")
+    assert plans.plan_totals([]) == (Money(0, "actual"),) * 3

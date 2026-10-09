@@ -87,6 +87,7 @@ class OfferEvaluation(RuleResult):
     is_bundle: bool = False
     price_per_site: Money = Money(0.0, "quoted")
     transition_per_site_monthly: Money = Money(0.0, "quoted")
+    transition_one_time: Money = Money(0.0, "quoted")  # whole offer, not split
     feasibility: FeasibilityResult = field(default_factory=FeasibilityResult)
 
 
@@ -115,5 +116,6 @@ def evaluate_offer(offer: Offer, stops: Sequence[Site], vendor: VendorInfo, sett
         is_bundle=n > 1,
         price_per_site=Money(round(price_per_site, 2), "quoted"),
         transition_per_site_monthly=Money(round(transition_per_site, 4), "quoted"),
+        transition_one_time=Money(offer.transition_cost_one_time, "quoted"),
         feasibility=feas,
     )

@@ -247,6 +247,20 @@ class FeasibilityOut(Out):
     reasons: list[str]
 
 
+class BundleSiteOut(Out):
+    location_id: int
+    location_name: str
+    lat: float
+    lng: float
+    is_this_location: bool
+    fits: bool
+    required_minutes: float
+    window_minutes: int | None
+    current_contribution: MoneyOut
+    projected_contribution: MoneyOut
+    change: MoneyOut
+
+
 class PlanOut(Out):
     plan_type: PlanType
     name: str
@@ -258,12 +272,17 @@ class PlanOut(Out):
     recommended: bool
     revenue: MoneyOut
     lines: list[LineOut]
+    monthly_cost: MoneyOut
+    bonus: MoneyOut
+    transition_monthly: MoneyOut
+    transition_one_time: MoneyOut
     projected_contribution: MoneyOut
     current_contribution: MoneyOut
     change: MoneyOut
     offer_id: int | None
     fix_id: int | None
     feasibility: FeasibilityOut | None
+    sites: list[BundleSiteOut]
     reasons: list[str]
     evidence: list[RefOut]
 

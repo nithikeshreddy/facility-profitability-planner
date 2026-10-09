@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app import loaders
 from app import models as m
 from app.rules import bundles, diagnosis, evidence, feasibility, finance, incentives, plans, renewals
-from app.rules.types import AssumptionUsed, LocationRecords, Money, Overrides, Settings, Targets, VendorInfo
+from app.rules.types import AssumptionUsed, LocationRecords, Money, Overrides, Settings, Site, Targets, VendorInfo
 
 
 class NotFound(LookupError):
@@ -17,6 +17,10 @@ class NotFound(LookupError):
 
 
 class NotFeasible(ValueError):
+    pass
+
+
+class InvalidOverrides(ValueError):
     pass
 
 
@@ -80,8 +84,24 @@ def compare_plans(
         stops = [loaders.site_from(db.get(m.Location, lid)) for lid in offer.location_ids]
         offer_vendor = ctx.vendors[offer.vendor_id]
         evaluation = bundles.evaluate_offer(offer, stops, offer_vendor, ctx.settings)
-        options.append(plans.offer_plan(records, evaluation, offer_vendor, current_contrib))
+        plan = plans.offer_plan(records, evaluation, offer_vendor, current_contrib)
+        if evaluation.is_bundle:
+            plan.sites = _bundle_sites(db, ctx, records, plan, evaluation, stops, offer_vendor)
+        options.append(plan)
     return plans.recommend(current, options)
+
+
+def _bundle_sites(
+    db: Session, ctx: Context, records: LocationRecords, plan: plans.PlanResult,
+    evaluation: bundles.OfferEvaluation, stops: list[Site], vendor: VendorInfo,
+) -> list[plans.BundleSiteResult]:
+    """Each bundled site's own share of the offer, so the bundle can be judged site by site."""
+    by_site = {records.site.id: plan}
+    for stop in stops:
+        if stop.id not in by_site:
+            stop_records = loaders.load_records(db, stop.id)
+            by_site[stop.id] = plans.offer_plan(stop_records, evaluation, vendor, contribution(ctx, stop_records)[0])
+    return plans.bundle_site_results(evaluation, stops, by_site, records.site.id)
 
 
 def renewal_queue(db: Session, ctx: Context) -> list[renewals.RenewalItem]:
@@ -210,6 +230,12 @@ def location_detail(db: Session, location_id: int) -> dict:
 def apply_overrides(ctx: Context, records: LocationRecords, ov: Overrides) -> tuple[Context, LocationRecords]:
     changes = {k: getattr(ov, k) for k in ("margin_low", "margin_high", "amortization_months") if getattr(ov, k) is not None}
     ctx = replace(ctx, settings=replace(ctx.settings, **changes))
+    if ctx.settings.margin_low > ctx.settings.margin_high:
+        # Checked against the values in effect, so overriding one end alone cannot invert the band.
+        raise InvalidOverrides(
+            f"Vendor margin low end ({ctx.settings.margin_low:.0%}) must not exceed the high end "
+            f"({ctx.settings.margin_high:.0%})."
+        )
     if ov.local_loaded_wage is not None:
         records = replace(records, site=replace(records.site, local_loaded_wage=ov.local_loaded_wage))
     return ctx, records

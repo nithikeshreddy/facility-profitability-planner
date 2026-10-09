@@ -36,6 +36,24 @@ def test_dallas_bundle_is_feasible_and_turns_each_site_positive(seeded, ctx, rec
     assert all(c.fits for c in bundle.feasibility.site_checks)
 
 
+
+@pytest.mark.parametrize("code", DALLAS)
+def test_dallas_bundle_reports_each_site_in_route_order(seeded, ctx, records, code):
+    r = records(code)
+    bundle = _option(services.compare_plans(seeded, ctx, r), "vendor_bundle")
+
+    assert [s.location_id for s in bundle.sites] == [c.location_id for c in bundle.feasibility.site_checks]
+    assert {s.location_name for s in bundle.sites} == {records(c).site.name for c in DALLAS}
+    assert [s.location_id for s in bundle.sites if s.is_this_location] == [r.site.id]
+    for s in bundle.sites:
+        assert s.fits and s.required_minutes <= s.window_minutes
+        assert s.current_contribution.amount == pytest.approx(-150)
+        assert s.projected_contribution.amount == pytest.approx(42, abs=1)
+        assert s.projected_contribution.kind == "quoted"
+    mine = next(s for s in bundle.sites if s.is_this_location)
+    assert mine.projected_contribution == bundle.projected_contribution
+    assert bundle.transition_one_time.amount == pytest.approx(300)  # whole offer, before the split
+
 def test_dallas_sites_have_two_current_vendors_and_are_bundle_candidates(seeded, records):
     sites = [records(c).site for c in DALLAS]
     assert len({s.current_vendor_id for s in sites}) == 2
@@ -215,3 +233,17 @@ def test_projection_drops_when_transition_cost_rises(seeded, ctx, records):
     base = plans.operational_fix_plan(r, fix, current, vendor, ctx.settings, ctx.month)
     pricier = plans.operational_fix_plan(r, replace(fix, one_time_cost=fix.one_time_cost + 1200), current, vendor, ctx.settings, ctx.month)
     assert base.projected_contribution.amount - pricier.projected_contribution.amount == pytest.approx(100)
+
+
+
+def test_plan_card_totals_add_up_to_the_projection(seeded, ctx):
+    """revenue − monthly cost − bonus − amortized transition = projected contribution, for every plan."""
+    for site in loaders.detailed_sites(seeded):
+        comparison = services.compare_plans(seeded, ctx, loaders.load_records(seeded, site.id))
+        for p in [comparison.current, *comparison.options]:
+            assert p.revenue.amount - p.monthly_cost.amount - p.bonus.amount - p.transition_monthly.amount == (
+                pytest.approx(p.projected_contribution.amount, abs=0.01)
+            ), (site.code, p.name)
+            if p.plan_type != "vendor_bundle":
+                assert p.sites == []
+        assert comparison.current.transition_one_time.amount == 0

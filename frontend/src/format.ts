@@ -1,5 +1,7 @@
 // Display formatting only — values themselves always come from the API.
 
+import type { Assumption } from './api'
+
 /** $1,234 or $67.50, with a true minus sign like the backend's reason sentences. */
 export function usd(amount: number): string {
   const sign = amount < 0 ? '−' : ''
@@ -39,4 +41,26 @@ export function minutes(n: number): string {
 
 export function number(n: number, digits = 2): string {
   return n.toLocaleString('en-US', { maximumFractionDigits: digits })
+}
+
+/** An assumption's value in its unit: 15%, $22/hr, 12 months. */
+export function formatAssumption(a: Assumption): string {
+  switch (a.unit) {
+    case 'ratio':
+      return `${number(a.value * 100, 1)}%`
+    case 'USD':
+      return usd(a.value)
+    case 'USD/hr':
+      return `${usd(a.value)}/hr`
+    case 'min':
+      return minutes(a.value)
+    default:
+      return `${number(a.value)} ${a.unit}`
+  }
+}
+
+/** API timestamp → "Oct 8, 2026, 3:04 PM" local. Timestamps without a zone are UTC (the backend stores UTC). */
+export function formatDateTime(iso: string): string {
+  const utc = /(Z|[+-]\d\d:\d\d)$/i.test(iso) ? iso : `${iso}Z`
+  return new Date(utc).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
 }

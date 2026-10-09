@@ -1,10 +1,11 @@
 import { latLngBounds, type LeafletEventHandlerFnMap } from 'leaflet'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet'
+import { CircleMarker, MapContainer, Popup, Tooltip, useMap } from 'react-leaflet'
 import { useNavigate } from 'react-router-dom'
 import type { Site } from '../api'
 import { DETAIL_OUTLINE, LOSS, PROFIT } from '../colors'
 import { usd } from '../format'
+import OsmTileLayer from './OsmTileLayer'
 import SiteSummaryCard from './SiteSummaryCard'
 
 const US_CENTER: [number, number] = [39.5, -97]
@@ -30,10 +31,7 @@ export default function SiteMap({ sites }: Props) {
   return (
     <div className="relative isolate h-[460px] overflow-hidden rounded-lg border border-slate-200">
       <MapContainer center={US_CENTER} zoom={4} minZoom={3} preferCanvas className="site-map h-full w-full" scrollWheelZoom>
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <OsmTileLayer />
         <FitBounds sites={sites} />
         <Markers sites={sites} onSelectLightweight={select} />
         {popup && popupPosition && (

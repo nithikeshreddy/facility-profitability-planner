@@ -23,3 +23,5 @@ def compare_plans(location_id: int, overrides: PlanOverridesIn | None = None, db
         return services.plan_workbench(db, location_id, Overrides(**overrides.model_dump()) if overrides else None)
     except services.NotFound as e:
         raise HTTPException(404, str(e))
+    except services.InvalidOverrides as e:
+        raise HTTPException(422, str(e))

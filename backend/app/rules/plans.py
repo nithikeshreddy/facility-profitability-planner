@@ -6,7 +6,7 @@ projected contribution = revenue − projected vendor cost − projected other c
 A plan is recommended only if it is feasible AND beats current contribution.
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 from app.rules.bundles import OfferEvaluation
@@ -20,6 +20,7 @@ from app.rules.types import (
     Ref,
     RuleResult,
     Settings,
+    Site,
     VendorInfo,
     combine_kinds,
     month_of,
@@ -45,6 +46,84 @@ class PlanResult(RuleResult):
     offer_id: int | None = None
     fix_id: int | None = None
     feasibility: FeasibilityResult | None = None
+    transition_one_time: Money = Money(0.0, "actual")  # whole fix / whole offer, before amortization
+    sites: list["BundleSiteResult"] = field(default_factory=list)  # per-site results, bundles only
+
+    # Card totals, derived from `lines` so they always add up to the projection.
+    @property
+    def monthly_cost(self) -> Money:
+        return plan_totals(self.lines)[0]
+
+    @property
+    def bonus(self) -> Money:
+        return plan_totals(self.lines)[1]
+
+    @property
+    def transition_monthly(self) -> Money:
+        return plan_totals(self.lines)[2]
+
+
+_MONTHLY_COST_KEYS = ("vendor_invoices", "other_direct", "return_visits", "credits")
+
+
+def _sum(lines: list[Line]) -> Money:
+    amount = round(sum(l.money.amount for l in lines), 2)
+    return Money(amount, combine_kinds(*(l.money.kind for l in lines if l.money.amount)))
+
+
+def plan_totals(lines: Iterable[Line]) -> tuple[Money, Money, Money]:
+    """(monthly cost, vendor bonus, amortized transition) for a plan's lines.
+
+    Monthly cost is vendor cost + other direct costs + return visits + credits;
+    revenue − monthly cost − bonus − transition = projected contribution.
+    """
+    lines = list(lines)
+    return (
+        _sum([l for l in lines if l.key in _MONTHLY_COST_KEYS]),
+        _sum([l for l in lines if l.key == "vendor_bonus"]),
+        _sum([l for l in lines if l.key == "transition"]),
+    )
+
+
+@dataclass
+class BundleSiteResult:
+    """One stop of a bundle: its route check and its own share of the offer."""
+
+    location_id: int
+    location_name: str
+    lat: float
+    lng: float
+    is_this_location: bool
+    fits: bool
+    required_minutes: float
+    window_minutes: int | None
+    current_contribution: Money
+    projected_contribution: Money
+    change: Money
+
+
+def bundle_site_results(
+    evaluation: OfferEvaluation, stops: Sequence[Site], plans_by_site: dict[int, PlanResult], this_id: int
+) -> list[BundleSiteResult]:
+    """Per-site results for a bundle in route order, joining each stop's route check with its own projection."""
+    checks = {c.location_id: c for c in evaluation.feasibility.site_checks}
+    out = []
+    for site in stops:
+        check, plan = checks[site.id], plans_by_site[site.id]
+        out.append(BundleSiteResult(
+            location_id=site.id,
+            location_name=site.name,
+            lat=site.lat,
+            lng=site.lng,
+            is_this_location=site.id == this_id,
+            fits=check.fits,
+            required_minutes=round(check.required_minutes, 1),
+            window_minutes=check.window_minutes,
+            current_contribution=plan.current_contribution,
+            projected_contribution=plan.projected_contribution,
+            change=plan.change,
+        ))
+    return out
 
 
 def _projected(revenue: Money, lines: list[Line]) -> Money:
@@ -130,6 +209,7 @@ def operational_fix_plan(
         current_contribution=current.total,
         change=_change(projected, current.total),
         fix_id=fix.id,
+        transition_one_time=Money(fix.one_time_cost, "estimated"),
     )
 
 
@@ -186,6 +266,7 @@ def offer_plan(
         change=_change(projected, current.total),
         offer_id=evaluation.offer_id,
         feasibility=feas,
+        transition_one_time=evaluation.transition_one_time,
     )
 
 
