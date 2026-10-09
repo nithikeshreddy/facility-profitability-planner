@@ -1,0 +1,15 @@
+# Render Blueprint: one Docker web service (FastAPI serves /api/* and the built frontend).
+# The free plan has no persistent disk, so SQLite lives inside the container and the app
+# reseeds the demonstration data on startup when the file is missing.
+services:
+  - type: web
+    name: facility-planner
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_PATH
+        value: /data/facility.db

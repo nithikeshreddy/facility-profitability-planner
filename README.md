@@ -8,6 +8,12 @@ The underlying loop: **find the loss, prove its cause, apply the matching fix, a
 
 **All data is synthetic** demonstration data. It is deterministic and generated from a fixed seed: 4 vendors, 12 detailed locations and about 2,000 summary-only sites across real U.S. metros, roughly 13% of them loss-making.
 
+## Live demo
+
+**https://facility-planner.onrender.com** *(placeholder: replace with the Render URL after the first deploy)*
+
+It runs on Render's free plan, so the instance sleeps when idle and the first request can take up to a minute to wake it. Each wake starts from freshly seeded demonstration data, so saved proposed actions do not survive a restart.
+
 ## Screens
 
 | Screen | Path | What it shows |
@@ -116,6 +122,8 @@ docker run --rm -p 8000:8000 -v fp-data:/data facility-planner # keep the databa
 ```
 
 The database lives at `/data/facility.db` and is seeded on first start.
+
+To deploy on Render, create a Blueprint from this repo: [render.yaml](render.yaml) defines one free Docker web service with `/api/health` as its health check. Render sets `$PORT`, and the container listens on `0.0.0.0:$PORT`.
 
 ## Tests and lint
 
