@@ -144,4 +144,6 @@ cd frontend && npm run build && npm run lint
 
 ## AI tools used
 
-Built with Claude Code in VS Code; the business rules are transparent calculations covered by tests.
+## AI tools used
+
+Developed with assistance from Claude Code in VS Code; all business rules and financial calculations are transparent, deterministic, and fully covered by tests.
