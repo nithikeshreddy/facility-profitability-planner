@@ -208,6 +208,7 @@ class PerformanceTarget(Base):
 
 class ProposedAction(Base):
     __tablename__ = "proposed_actions"
+    __table_args__ = (CheckConstraint(_in("projected_kind", MONEY_KINDS)),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     location_id: Mapped[int] = mapped_column(ForeignKey("locations.id"), index=True)
@@ -217,6 +218,13 @@ class ProposedAction(Base):
     status: Mapped[str] = mapped_column(String(20), default="proposed")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     note: Mapped[str | None] = mapped_column(Text)
+    # additions: what the projection was computed from, so a saved action can be traced and re-run
+    projected_kind: Mapped[str] = mapped_column(String(10), default="estimated")
+    offer_id: Mapped[int | None] = mapped_column(ForeignKey("vendor_offers.id"))
+    fix_id: Mapped[int | None] = mapped_column(ForeignKey("operational_fixes.id"))
+    overrides: Mapped[dict | None] = mapped_column(JSON)  # assumption overrides used
+
+    location: Mapped[Location] = relationship()
 
 
 class Assumption(Base):

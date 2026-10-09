@@ -78,6 +78,11 @@ facility-planner/
 
 - **Return visits:** `Invoice` lines with `line_type=return_visit` *are* the company-paid return visits. "Vendor invoices" in the contribution formula = `base` + `extra` lines. (Phoenix: $1,500 − $1,380 − $380 = −$260 only works this way.)
 - **Bonus:** contribution uses the bonus computed by `rules/incentives.py` (so the Denver toggle changes contribution). Stored `CostItem(type=bonus)` rows must not be added on top of it.
+- **First stop:** feasibility counts travel to a route's first stop as 0 (it happens before the window opens).
+- **Capacity:** all sites in an offer are assumed serviced the same night (worst case) for `crews × shift`.
+- **Bundle split:** quoted price and amortized transition cost are split equally across the bundle's sites.
+- **Vendor changes keep return visits:** only an operational fix reduces company-paid return visits.
+- **Renewal price** = `max(cost after best feasible plan, estimate low) ÷ (1 − target margin)` (÷ 0.9 by default).
 
 ## Five demo cases (targets to reproduce from records)
 
@@ -89,7 +94,7 @@ facility-planner/
 | 4 | **Infeasible cheap offer** (Atlanta) | Window 22:00–01:00 (180 min). Current crew of 2, $1,300. "Budget Shine" $1,050, crew of 1 needing 225 min. | **Rejected** with the reason sentence above |
 | 5 | **Performance bonus** (Denver) | Revenue $1,600, invoice $1,350. Targets: completion ≥ 98%, inspection avg ≥ 90, fixed within 24h ≥ 90%. Bonus 5% capped at $75. | Bonus **$67.50**, contribution **$182.50**. One inspection below target (or un-marking a customer-caused failure) → ineligible, contribution updates |
 
-Other 7 detailed locations: mix of healthy and mildly loss-making; at least one with missing evidence (e.g. no inspections) so the UI shows **"Evidence missing"** rather than guessing.
+Other 5 detailed locations: mix of healthy and mildly loss-making; at least one with missing evidence (e.g. no inspections) so the UI shows **"Evidence missing"** rather than guessing.
 
 Data: deterministic (fixed seed), 4 vendors, 12 detailed + ~2,000 lightweight sites (`detailed=false`, summary fields only) across real U.S. metros, ~10–15% loss-making.
 
@@ -102,6 +107,16 @@ Shared layout: left nav, "Demonstration data" banner, **Reset demo** button.
 3. **Compare plans** (`/compare`) — current vs operational fix vs offers/bundles; editable assumptions re-run via API; feasibility with reasons; **Save proposed action**.
 4. **Renewal review** (`/renewals`) — queue + suggested price/scope/frequency review.
 5. **Vendor incentives** (`/incentives`) — targets vs results, eligibility, bonus, exceptions, toggle one service result.
+
+## API (`backend/app/routers/`, schemas in `app/schemas.py`)
+
+Routers stay thin: `loaders` (ORM → dataclasses) → `services` (composition) → `rules/` (logic) → Pydantic schema. Money is always `{amount, kind}`.
+
+- `GET  /api/overview?state=&loss_only=&detailed_only=` — KPI totals (over the filtered set), states, compact site list for the map
+- `GET  /api/locations/{id}` — contract, service requirements, waterfall, reasonable-cost range + assumptions, diagnosis flags with evidence records, missing evidence, incentive (404 for lightweight sites)
+- `POST /api/locations/{id}/plans` — optional overrides `{local_loaded_wage, margin_low, margin_high, return_visit_reduction, amortization_months}` (ratios 0–1) → current, operational fixes, offers/bundles with feasibility, recommended plan + reasons
+- `POST /api/actions` — `{location_id, plan_type, offer_id?, fix_id?, overrides?, note?}`; projection recomputed server-side; infeasible plan → 422 with its reason. `GET /api/actions?location_id=`
+- `POST /api/demo/reset` — `reset_and_seed()`
 
 ## Build order
 

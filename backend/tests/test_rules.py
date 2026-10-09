@@ -4,14 +4,16 @@ from datetime import date
 
 import pytest
 
-from app.rules import feasibility, finance, incentives, renewals
+from app.rules import evidence, feasibility, finance, incentives, plans, renewals
 from app.rules.types import (
     ContractInfo,
     CostLine,
     InspectionRec,
     InvoiceLine,
     Issue,
+    LocationRecords,
     Money,
+    Ref,
     Settings,
     Site,
     Targets,
@@ -123,3 +125,37 @@ def test_renewal_queue_sorted_by_date_then_gap_and_skips_healthy():
     queue = renewals.renewal_queue(inputs, as_of=date(2026, 10, 1))
     assert [i.location_name for i in queue] == ["Big gap", "Small gap", "Later"]
     assert queue[0].suggested_price.amount == pytest.approx(1200 / 0.9, abs=0.01)
+
+
+def test_portfolio_totals_combine_kinds_and_count_losses():
+    totals = finance.portfolio_totals([
+        (Money(1000, "actual"), Money(-50, "actual")),
+        (Money(2000, "actual"), Money(300, "estimated")),
+    ])
+    assert totals.sites == 2 and totals.loss_making == 1
+    assert totals.revenue == Money(3000, "actual")
+    assert totals.contribution == Money(250, "estimated")
+    assert totals.direct_costs == Money(2750, "estimated")
+
+
+def test_evidence_describe_resolves_records_and_falls_back():
+    records = LocationRecords(
+        site=_site(),
+        invoices=(InvoiceLine(7, 1, MONTH, 95, "return_visit", description="Return visit after locked stockroom"),),
+        issues=(Issue(3, date(2026, 9, 3), "access", "Stockroom locked", True, 20.0),),
+    )
+    refs = [Ref("issue", 3), Ref("invoice", 7), Ref("issue", 3), Ref("vendor_offer", 2)]
+    items = evidence.describe(refs, records)
+    assert [(i.type, i.id) for i in items] == [("issue", 3), ("invoice", 7), ("vendor_offer", 2)]
+    assert items[0].date == date(2026, 9, 3) and "Stockroom locked" in items[0].summary
+    assert "customer-caused" in items[0].summary
+    assert items[1].money == Money(95, "actual")
+    assert items[2].summary == "Vendor offer #2"
+
+
+def test_action_summary_template():
+    plan = plans.PlanResult(name="Install stockroom lockbox", projected_contribution=Money(69.5, "estimated"),
+                            current_contribution=Money(-260, "actual"))
+    assert plans.action_summary(plan) == (
+        "Install stockroom lockbox: projected contribution $69.50 vs current −$260 per month."
+    )

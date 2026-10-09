@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 import app.models  # noqa: F401  (registers tables for create_all)
 from app.db import Base, engine
-from app.routers import health
+from app.routers import actions, demo, health, locations, overview
 
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
@@ -19,7 +19,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Facility Profitability Planner", lifespan=lifespan)
 
-app.include_router(health.router)
+for r in (health, overview, locations, actions, demo):
+    app.include_router(r.router)
 
 # Single-service deploy: serve the built frontend when it exists. Mounted last so /api/* wins.
 if FRONTEND_DIST.is_dir():

@@ -83,6 +83,31 @@ def lightweight_contribution(revenue: float, actual_cost: float) -> Money:
     return Money(round(revenue - actual_cost, 2), "actual")
 
 
+@dataclass(frozen=True)
+class PortfolioTotals:
+    sites: int
+    loss_making: int
+    revenue: Money
+    direct_costs: Money  # revenue − contribution
+    contribution: Money
+
+
+def portfolio_totals(rows: Iterable[tuple[Money, Money]]) -> PortfolioTotals:
+    """KPI totals over (revenue, contribution) pairs; the least certain kind wins."""
+    rows = list(rows)
+    revenue = round(sum(r.amount for r, _ in rows), 2)
+    contribution = round(sum(c.amount for _, c in rows), 2)
+    rev_kind = combine_kinds(*(r.kind for r, _ in rows))
+    con_kind = combine_kinds(*(c.kind for _, c in rows))
+    return PortfolioTotals(
+        sites=len(rows),
+        loss_making=sum(1 for _, c in rows if c.amount < 0),
+        revenue=Money(revenue, rev_kind),
+        direct_costs=Money(round(revenue - contribution, 2), combine_kinds(rev_kind, con_kind)),
+        contribution=Money(contribution, con_kind),
+    )
+
+
 @dataclass
 class CostRangeResult(RuleResult):
     available: bool = False

@@ -52,6 +52,17 @@ class Settings:
 
 
 @dataclass(frozen=True)
+class Overrides:
+    """Manager-edited assumptions for a plan comparison; None keeps the stored value."""
+
+    local_loaded_wage: float | None = None
+    margin_low: float | None = None
+    margin_high: float | None = None
+    return_visit_reduction: float | None = None  # 0..1
+    amortization_months: float | None = None
+
+
+@dataclass(frozen=True)
 class VendorInfo:
     id: int
     name: str

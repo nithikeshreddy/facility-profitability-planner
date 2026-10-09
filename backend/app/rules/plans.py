@@ -33,13 +33,14 @@ class PlanResult(RuleResult):
     name: str = ""
     location_id: int = 0
     vendor_id: int | None = None
+    vendor_name: str | None = None
     vendor_change: bool = False
     feasible: bool = True
     revenue: Money = Money(0.0, "actual")
     lines: list[Line] = field(default_factory=list)  # projected costs, positive amounts
     projected_contribution: Money = Money(0.0, "actual")
-    current_contribution: float = 0.0
-    change: float = 0.0
+    current_contribution: Money = Money(0.0, "actual")
+    change: Money = Money(0.0, "actual")  # projected − current
     recommended: bool = False
     offer_id: int | None = None
     fix_id: int | None = None
@@ -51,6 +52,10 @@ def _projected(revenue: Money, lines: list[Line]) -> Money:
     return Money(amount, combine_kinds(revenue.kind, *(l.money.kind for l in lines if l.money.amount)))
 
 
+def _change(projected: Money, current: Money) -> Money:
+    return Money(round(projected.amount - current.amount, 2), combine_kinds(projected.kind, current.kind))
+
+
 def _line(current: ContributionResult, key: str) -> Line:
     return next(l for l in current.lines if l.key == key)
 
@@ -60,7 +65,7 @@ def _assumed_bonus(vendor: VendorInfo) -> Line:
     return Line("vendor_bonus", "Vendor bonus (full cap assumed)", Money(amount or 0.0, "estimated"))
 
 
-def current_plan(records: LocationRecords, current: ContributionResult) -> PlanResult:
+def current_plan(records: LocationRecords, current: ContributionResult, vendor: VendorInfo | None = None) -> PlanResult:
     return PlanResult(
         reasons=["Current vendor and delivery, from this month's records."] + current.reasons,
         evidence=list(current.evidence),
@@ -68,10 +73,11 @@ def current_plan(records: LocationRecords, current: ContributionResult) -> PlanR
         name="Current",
         location_id=records.site.id,
         vendor_id=records.site.current_vendor_id,
+        vendor_name=vendor.name if vendor else None,
         revenue=current.revenue,
         lines=list(current.lines),
         projected_contribution=current.total,
-        current_contribution=current.total.amount,
+        current_contribution=current.total,
     )
 
 
@@ -115,13 +121,14 @@ def operational_fix_plan(
         name=fix.name,
         location_id=records.site.id,
         vendor_id=records.site.current_vendor_id,
+        vendor_name=vendor.name,
         vendor_change=False,
         feasible=True,
         revenue=current.revenue,
         lines=lines,
         projected_contribution=projected,
-        current_contribution=current.total.amount,
-        change=round(projected.amount - current.total.amount, 2),
+        current_contribution=current.total,
+        change=_change(projected, current.total),
         fix_id=fix.id,
     )
 
@@ -169,13 +176,14 @@ def offer_plan(
         name=f"{vendor.name} {'bundle' if evaluation.is_bundle else 'offer'}",
         location_id=site.id,
         vendor_id=vendor.id,
+        vendor_name=vendor.name,
         vendor_change=vendor.id != site.current_vendor_id,
         feasible=feas.feasible,
         revenue=current.revenue,
         lines=lines,
         projected_contribution=projected,
-        current_contribution=current.total.amount,
-        change=round(projected.amount - current.total.amount, 2),
+        current_contribution=current.total,
+        change=_change(projected, current.total),
         offer_id=evaluation.offer_id,
         feasibility=feas,
     )
@@ -213,3 +221,11 @@ def recommend(current: PlanResult, options: Iterable[PlanResult]) -> PlanCompari
 def best_feasible_contribution(comparison: PlanComparison) -> float:
     """The contribution after the best feasible plan (current if nothing beats it)."""
     return comparison.best.projected_contribution.amount if comparison.best else comparison.current.projected_contribution.amount
+
+
+def action_summary(plan: PlanResult) -> str:
+    """One-line summary stored with a proposed action."""
+    return (
+        f"{plan.name}: projected contribution {usd(plan.projected_contribution.amount)} "
+        f"vs current {usd(plan.current_contribution.amount)} per month."
+    )

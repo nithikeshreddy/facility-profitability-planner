@@ -74,6 +74,11 @@ facility-planner/
 
 - **Return visits.** `Invoice` lines with `line_type = return_visit` *are* the company-paid return visits. "Vendor invoices" in the contribution formula means `base` + `extra` lines only, so a return visit is never counted twice. (Phoenix: $1,500 − $1,380 − $380 = −$260.)
 - **Vendor bonuses.** Contribution uses the bonus calculated by the incentive rules (`rules/incentives.py`), so changing a service result changes contribution. No `CostItem(type = bonus)` rows are seeded, and any stored bonus cost item is never added on top of the calculated bonus.
+- **Travel to the first stop.** In the feasibility check, travel to the first stop of a route counts as 0 minutes: it happens before the service window opens.
+- **Same-night capacity.** The crew-capacity check assumes every site in an offer is serviced the same night (the worst case): total crew-minutes ≤ crews_available × shift_minutes.
+- **Equal bundle split.** A bundle's quoted monthly price and its amortized transition cost are split equally across the bundle's sites.
+- **Vendor changes keep return visits.** A vendor offer or bundle keeps the current company-paid return visits; a vendor change alone does not remove their cause. Only an operational fix reduces them.
+- **Renewal price.** Suggested price = max(monthly cost after the best feasible plan, reasonable-cost low) ÷ (1 − target margin), i.e. ÷ 0.9 at the default 10% margin.
 
 Every money figure carries a **kind**: `estimated`, `quoted`, or `actual`, shown in the UI as a small badge.
 
@@ -104,7 +109,7 @@ The 12 detailed locations must include these five cases. Numbers below are the t
 4. **Infeasible cheap offer (Atlanta).** Service window 22:00–01:00 (180 min). Current vendor: crew of 2, cost $1,300. "Budget Shine" offers $1,050 with a crew of 1 needing 225 minutes. Offer is rejected with the reason sentence above.
 5. **Performance bonus (Denver).** Revenue $1,600, invoice $1,350. Vendor targets: completion ≥ 98%, inspection average ≥ 90, issues fixed within 24h ≥ 90%. Bonus 5% of invoice capped at $75 → $67.50, contribution $182.50. Changing one inspection to below target (or un-marking a customer-caused failure) makes the vendor ineligible and contribution updates.
 
-The other 7 detailed locations: a mix of healthy and mildly loss-making sites, at least one with missing evidence (e.g. no inspections recorded) so the UI shows "Evidence missing" rather than guessing.
+The other 5 detailed locations: a mix of healthy and mildly loss-making sites, at least one with missing evidence (e.g. no inspections recorded) so the UI shows "Evidence missing" rather than guessing.
 
 ## 7. Screens
 
